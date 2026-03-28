@@ -4,7 +4,11 @@ import * as path from 'path';
 
 @Injectable()
 export class AppService {
-  private readonly avatarsPath = path.join(__dirname, '../../frontend/public/characters');
+  // In Docker: /app/backend/dist/public/characters (from dist/app.service.js)
+  // Locally: ../../frontend/public/characters
+  private readonly avatarsPath = process.env.NODE_ENV === 'production'
+    ? path.join(__dirname, 'public/characters')
+    : path.join(__dirname, '../../frontend/public/characters');
 
   getHello(): string {
     return 'Hello World!';
