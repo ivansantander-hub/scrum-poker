@@ -1,69 +1,66 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { RoomManager, type EstimationType } from './components/RoomManager'
+import { RoomManager } from './components/RoomManager'
 import { Lobby } from './components/Lobby'
 import { GameBoard } from './components/GameBoard'
 import { ConnectionStatus } from './components/ConnectionStatus'
+import { useSocket } from './hooks/useSocket'
+import { useGameStore } from './hooks/useGameStore'
 import './App.css'
 
 type View = 'rooms' | 'lobby' | 'game'
 
-interface Player {
-  id: string
-  name: string
-  isHost: boolean
-  hasVoted: boolean
-  vote?: string
-}
-
-function generateId(): string {
-  return Math.random().toString(36).substring(2, 9)
-}
-
-const pageVariants = {
-  initial: { opacity: 0, y: 20 },
-  animate: { opacity: 1, y: 0 },
-  exit: { opacity: 0, y: -20 }
-}
-
-const pageTransition = {
-  type: 'spring' as const,
-  stiffness: 300,
-  damping: 30
-}
-
-function App() {
+function AppContent() {
   const [view, setView] = useState<View>('rooms')
-  const [roomCode, setRoomCode] = useState('')
-  const [playerName, setPlayerName] = useState('')
-  const [players, setPlayers] = useState<Player[]>([])
-  const [estimationType, setEstimationType] = useState<EstimationType>('fibonacci')
+  const { currentRoom, currentPlayer } = useGameStore()
+  const {
+    error,
+    gameShouldStart,
+    createRoom,
+    joinRoom,
+    leaveRoom,
+    startGame,
+    submitVote,
+    revealVotes,
+    resetRound,
+    clearError,
+    clearGameStart,
+  } = useSocket()
 
-  const handleCreateRoom = (code: string, name: string, type: EstimationType) => {
-    setRoomCode(code)
-    setPlayerName(name)
-    setEstimationType(type)
-    setPlayers([
-      { id: generateId(), name, isHost: true, hasVoted: false }
-    ])
+  useEffect(() => {
+    if (gameShouldStart && view === 'lobby') {
+      setView('game')
+      clearGameStart()
+    }
+  }, [gameShouldStart, view, clearGameStart])
+
+  useEffect(() => {
+    if (currentRoom && currentPlayer) {
+      if (currentRoom.isStarted) {
+        setView('game')
+      } else {
+        setView('lobby')
+      }
+    }
+  }, [])
+
+  const handleCreateRoom = (_code: string, name: string, type: 'fibonacci' | 'hours') => {
+    createRoom(name, type)
     setView('lobby')
   }
 
   const handleJoinRoom = (code: string, name: string) => {
-    setRoomCode(code)
-    setPlayerName(name)
-    setPlayers(prev => [...prev, { id: generateId(), name, isHost: false, hasVoted: false }])
+    joinRoom(code, name)
     setView('lobby')
   }
 
   const handleStartGame = () => {
+    startGame()
     setView('game')
   }
 
   const handleLeaveRoom = () => {
-    setRoomCode('')
-    setPlayerName('')
-    setPlayers([])
+    leaveRoom()
     setView('rooms')
   }
 
@@ -71,62 +68,75 @@ function App() {
     setView('lobby')
   }
 
+  const handleSubmitVote = (vote: string) => {
+    submitVote(vote)
+  }
+
+  const handleReveal = () => {
+    revealVotes()
+  }
+
+  const handleReset = () => {
+    resetRound()
+  }
+
   return (
-    <div className="app">
+    <>
       <ConnectionStatus />
       <AnimatePresence mode="wait">
         {view === 'rooms' && (
           <motion.div
             key="rooms"
-            initial="initial"
-            animate="animate"
-            exit="exit"
-            variants={pageVariants}
-            transition={pageTransition}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
           >
-            <RoomManager onCreateRoom={handleCreateRoom} onJoinRoom={handleJoinRoom} />
+            <RoomManager
+              onCreateRoom={handleCreateRoom}
+              onJoinRoom={handleJoinRoom}
+              error={error}
+              onClearError={clearError}
+            />
           </motion.div>
         )}
-        {view === 'lobby' && (
+        {view === 'lobby' && currentRoom && currentPlayer && (
           <motion.div
             key="lobby"
-            initial="initial"
-            animate="animate"
-            exit="exit"
-            variants={pageVariants}
-            transition={pageTransition}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
           >
             <Lobby
-              roomCode={roomCode}
-              playerName={playerName}
-              players={players}
-              estimationType={estimationType}
+              room={currentRoom}
+              player={currentPlayer}
               onStartGame={handleStartGame}
               onLeaveRoom={handleLeaveRoom}
             />
           </motion.div>
         )}
-        {view === 'game' && (
+        {view === 'game' && currentRoom && currentPlayer && (
           <motion.div
             key="game"
-            initial="initial"
-            animate="animate"
-            exit="exit"
-            variants={pageVariants}
-            transition={pageTransition}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
           >
             <GameBoard
-              roomCode={roomCode}
-              playerName={playerName}
-              players={players}
-              estimationType={estimationType}
+              room={currentRoom}
+              player={currentPlayer}
               onLeaveGame={handleLeaveGame}
+              onSubmitVote={handleSubmitVote}
+              onReveal={handleReveal}
+              onReset={handleReset}
             />
           </motion.div>
         )}
       </AnimatePresence>
-    </div>
+    </>
   )
 }
 
-export default App
+export default AppContent

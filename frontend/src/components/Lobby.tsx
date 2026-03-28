@@ -1,11 +1,9 @@
 import { motion, AnimatePresence } from 'framer-motion'
-import { type EstimationType } from './RoomManager'
+import { type Room, type Player } from '../hooks/useGameStore'
 
 interface LobbyProps {
-  roomCode: string
-  playerName: string
-  players: { id: string; name: string; isHost: boolean; hasVoted: boolean }[]
-  estimationType: EstimationType
+  room: Room
+  player: Player
   onStartGame: () => void
   onLeaveRoom: () => void
 }
@@ -25,11 +23,11 @@ const playerVariants = {
   exit: { opacity: 0, x: -20, scale: 0.9 }
 }
 
-export function Lobby({ roomCode, playerName, players, estimationType, onStartGame, onLeaveRoom }: LobbyProps) {
-  const isHost = players.find(p => p.name === playerName)?.isHost || false
+export function Lobby({ room, player, onStartGame, onLeaveRoom }: LobbyProps) {
+  const isHost = player.isHost
 
   const copyCode = () => {
-    navigator.clipboard.writeText(roomCode)
+    navigator.clipboard.writeText(room.code)
   }
 
   return (
@@ -62,7 +60,7 @@ export function Lobby({ roomCode, playerName, players, estimationType, onStartGa
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
           >
-            {roomCode}
+            {room.code}
           </motion.span>
         </motion.div>
       </header>
@@ -77,7 +75,7 @@ export function Lobby({ roomCode, playerName, players, estimationType, onStartGa
           <div className="info-row">
             <span className="info-label">Mode</span>
             <span className="info-value">
-              {estimationType === 'fibonacci' ? '🌰 Fibonacci' : '⏱ Hours'}
+              {room.estimationType === 'fibonacci' ? '🌰 Fibonacci' : '⏱ Hours'}
             </span>
           </div>
         </motion.div>
@@ -88,14 +86,14 @@ export function Lobby({ roomCode, playerName, players, estimationType, onStartGa
             animate={{ opacity: 1 }}
             transition={{ delay: 0.2 }}
           >
-            Players <span className="count">({players.length})</span>
+            Players <span className="count">({room.players.length})</span>
           </motion.h2>
           <ul className="players-list">
             <AnimatePresence>
-              {players.map((player, i) => (
+              {room.players.map((p, i) => (
                 <motion.li
-                  key={player.id}
-                  className={`player ${player.hasVoted ? 'voted' : ''}`}
+                  key={p.id}
+                  className={`player ${p.hasVoted ? 'voted' : ''}`}
                   custom={i}
                   variants={playerVariants}
                   initial="hidden"
@@ -106,25 +104,26 @@ export function Lobby({ roomCode, playerName, players, estimationType, onStartGa
                   <motion.span 
                     className="player-avatar"
                     animate={{ 
-                      backgroundColor: player.hasVoted ? 'var(--success)' : 'var(--accent)'
+                      backgroundColor: p.hasVoted ? 'var(--success)' : 'var(--accent)'
                     }}
                     transition={{ duration: 0.3 }}
                   >
-                    {player.name.charAt(0).toUpperCase()}
+                    {p.name.charAt(0).toUpperCase()}
                   </motion.span>
                   <span className="player-name">
-                    {player.name}
-                    {player.isHost && <span className="host-badge">HOST</span>}
+                    {p.name}
+                    {p.isHost && <span className="host-badge">HOST</span>}
+                    {p.id === player.id && <span className="you-badge">YOU</span>}
                   </span>
                   <motion.span 
                     className="vote-status"
                     animate={{ 
-                      color: player.hasVoted ? 'var(--success)' : 'var(--text-muted)',
-                      scale: player.hasVoted ? [1, 1.2, 1] : 1
+                      color: p.hasVoted ? 'var(--success)' : 'var(--text-muted)',
+                      scale: p.hasVoted ? [1, 1.2, 1] : 1
                     }}
                     transition={{ duration: 0.3 }}
                   >
-                    {player.hasVoted ? '✓' : '○'}
+                    {p.hasVoted ? '✓' : '○'}
                   </motion.span>
                 </motion.li>
               ))}

@@ -1,57 +1,199 @@
-import { useEffect, useState } from 'react';
-import { io, Socket } from 'socket.io-client';
-
-const SOCKET_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-
-export interface ServerStatus {
-  status: 'online' | 'offline';
-  clients: number;
-  timestamp?: number;
-}
+import { useEffect, useCallback, useState } from 'react'
+import { getSocket } from './socket'
+import { useGameStore } from './useGameStore'
 
 export function useSocket() {
-  const [isConnected, setIsConnected] = useState(false);
-  const [serverStatus, setServerStatus] = useState<ServerStatus>({ status: 'offline', clients: 0 });
-  const [socket, setSocket] = useState<Socket | null>(null);
+  const {
+    currentRoom,
+    currentPlayer,
+    socketId,
+    isConnected,
+    setRoom,
+    setPlayer,
+    setSocketId,
+    setConnected,
+    addPlayer,
+    removePlayer,
+    reset,
+  } = useGameStore()
+
+  const [error, setError] = useState<string | null>(null)
+  const [gameShouldStart, setGameShouldStart] = useState(false)
 
   useEffect(() => {
-    const newSocket = io(SOCKET_URL, {
-      reconnection: true,
-      reconnectionAttempts: 5,
-      reconnectionDelay: 1000,
-      timeout: 10000,
-    });
+    const socket = getSocket()
 
-    newSocket.on('connect', () => {
-      console.log('Connected to server');
-      setIsConnected(true);
-    });
+    socket.on('connect', () => {
+      console.log('Connected to server')
+      setConnected(true)
+      setError(null)
+      setSocketId(socket.id || null)
+    })
 
-    newSocket.on('disconnect', () => {
-      console.log('Disconnected from server');
-      setIsConnected(false);
-      setServerStatus(prev => ({ ...prev, status: 'offline' }));
-    });
+    socket.on('disconnect', () => {
+      console.log('Disconnected from server')
+      setConnected(false)
+    })
 
-    newSocket.on('connect_error', () => {
-      setIsConnected(false);
-      setServerStatus({ status: 'offline', clients: 0 });
-    });
+    socket.on('connect_error', () => {
+      setConnected(false)
+    })
 
-    newSocket.on('serverStatus', (data: ServerStatus) => {
-      setServerStatus(data);
-    });
+    socket.on('roomCreated', (data) => {
+      setPlayer(data.player)
+    })
 
-    setSocket(newSocket);
+    socket.on('roomJoined', (data) => {
+      setPlayer(data.player)
+      setRoom(data.room)
+    })
+
+    socket.on('roomState', (data) => {
+      if (data.room.players.length > 0) {
+        setRoom(data.room)
+      }
+    })
+
+    socket.on('playerJoined', (data) => {
+      addPlayer(data.player)
+    })
+
+    socket.on('playerLeft', (data) => {
+      removePlayer(data.playerId)
+    })
+
+    socket.on('voteUpdated', (data) => {
+      useGameStore.getState().updatePlayer(data.playerId, { hasVoted: true, vote: data.vote })
+    })
+
+    socket.on('votesRevealed', (data) => {
+      setRoom(data.room)
+    })
+
+    socket.on('roomReset', () => {
+      const room = useGameStore.getState().currentRoom
+      if (room) {
+        setRoom({
+          ...room,
+          isRevealed: false,
+          players: room.players.map((p) => ({ ...p, hasVoted: false, vote: undefined })),
+        })
+      }
+    })
+
+    socket.on('gameStarted', () => {
+      const room = useGameStore.getState().currentRoom
+      if (room) {
+        setRoom({ ...room, isStarted: true })
+      }
+      setGameShouldStart(true)
+    })
+
+    socket.on('error', (data) => {
+      setError(data.message)
+    })
+
+    if (socket.connected) {
+      setConnected(true)
+      setSocketId(socket.id || null)
+    }
 
     return () => {
-      newSocket.disconnect();
-    };
-  }, []);
+      socket.off('connect')
+      socket.off('disconnect')
+      socket.off('connect_error')
+      socket.off('roomCreated')
+      socket.off('roomJoined')
+      socket.off('roomState')
+      socket.off('playerJoined')
+      socket.off('playerLeft')
+      socket.off('voteUpdated')
+      socket.off('votesRevealed')
+      socket.off('roomReset')
+      socket.off('gameStarted')
+      socket.off('error')
+    }
+  }, [setConnected, setSocketId, setPlayer, setRoom, addPlayer, removePlayer])
+
+  const createRoom = useCallback((playerName: string, estimationType: 'fibonacci' | 'hours') => {
+    const socket = getSocket()
+    setError(null)
+    socket.emit('createRoom', { playerName, estimationType }, (response) => {
+      if (response.success && response.room && response.player) {
+        setRoom(response.room)
+        setPlayer(response.player)
+      } else {
+        setError(response.error || 'Failed to create room')
+      }
+    })
+  }, [setRoom, setPlayer])
+
+  const joinRoom = useCallback((roomCode: string, playerName: string) => {
+    const socket = getSocket()
+    setError(null)
+    socket.emit('joinRoom', { roomCode: roomCode.toUpperCase(), playerName }, (response) => {
+      if (response.success && response.room && response.player) {
+        setRoom(response.room)
+        setPlayer(response.player)
+      } else {
+        setError(response.error || 'Failed to join room')
+      }
+    })
+  }, [setRoom, setPlayer])
+
+  const leaveRoom = useCallback(() => {
+    const socket = getSocket()
+    const { currentRoom, currentPlayer } = useGameStore.getState()
+    if (!currentRoom || !currentPlayer) return
+    socket.emit('leaveRoom', { roomCode: currentRoom.code, playerId: currentPlayer.id })
+    reset()
+    setGameShouldStart(false)
+  }, [reset])
+
+  const startGame = useCallback(() => {
+    const socket = getSocket()
+    const { currentRoom, currentPlayer } = useGameStore.getState()
+    if (!currentRoom || !currentPlayer?.isHost) return
+    socket.emit('startGame', { roomCode: currentRoom.code })
+    setRoom({ ...currentRoom, isStarted: true })
+  }, [setRoom])
+
+  const submitVote = useCallback((vote: string) => {
+    const socket = getSocket()
+    const { currentRoom, currentPlayer } = useGameStore.getState()
+    if (!currentRoom || !currentPlayer) return
+    socket.emit('submitVote', { roomCode: currentRoom.code, playerId: currentPlayer.id, vote })
+  }, [])
+
+  const revealVotes = useCallback(() => {
+    const socket = getSocket()
+    const { currentRoom, currentPlayer } = useGameStore.getState()
+    if (!currentRoom || !currentPlayer?.isHost) return
+    socket.emit('revealVotes', { roomCode: currentRoom.code })
+  }, [])
+
+  const resetRound = useCallback(() => {
+    const socket = getSocket()
+    const { currentRoom, currentPlayer } = useGameStore.getState()
+    if (!currentRoom || !currentPlayer?.isHost) return
+    socket.emit('resetRound', { roomCode: currentRoom.code })
+  }, [])
 
   return {
-    socket,
+    socketId,
     isConnected,
-    serverStatus,
-  };
+    currentRoom,
+    currentPlayer,
+    error,
+    gameShouldStart,
+    createRoom,
+    joinRoom,
+    leaveRoom,
+    startGame,
+    submitVote,
+    revealVotes,
+    resetRound,
+    clearError: () => setError(null),
+    clearGameStart: () => setGameShouldStart(false),
+  }
 }

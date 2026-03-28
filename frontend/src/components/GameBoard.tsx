@@ -1,13 +1,13 @@
-import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { type EstimationType } from './RoomManager'
+import { type Room, type Player } from '../hooks/useGameStore'
 
 interface GameBoardProps {
-  roomCode: string
-  playerName: string
-  players: { id: string; name: string; isHost: boolean; hasVoted: boolean; vote?: string }[]
-  estimationType: EstimationType
+  room: Room
+  player: Player
   onLeaveGame: () => void
+  onSubmitVote: (vote: string) => void
+  onReveal: () => void
+  onReset: () => void
 }
 
 const FIBONACCI_CARDS = ['0', '1', '2', '3', '5', '8', '13', '21', '34', '?', '☕']
@@ -43,30 +43,34 @@ const playerCardVariants = {
   }
 }
 
-export function GameBoard({ roomCode, playerName, players, estimationType, onLeaveGame }: GameBoardProps) {
-  const [selected, setSelected] = useState<string | null>(null)
-  const [revealed, setRevealed] = useState(false)
+function calculateAverage(votes: (string | undefined)[]): string {
+  const validVotes = votes
+    .filter(v => v && v !== '?' && v !== '☕')
+    .map(v => {
+      if (v?.endsWith('h')) {
+        return parseInt(v.replace('h', ''))
+      }
+      return parseInt(v || '0')
+    })
+    .filter(n => !isNaN(n))
+  
+  if (validVotes.length === 0) return '-'
+  
+  const avg = validVotes.reduce((a, b) => a + b, 0) / validVotes.length
+  return Number.isInteger(avg) ? avg.toString() : avg.toFixed(1)
+}
 
-  const isHost = players.find(p => p.name === playerName)?.isHost || false
-  const cards = estimationType === 'fibonacci' ? FIBONACCI_CARDS : HOURS_CARDS
+export function GameBoard({ room, player, onLeaveGame, onSubmitVote, onReveal, onReset }: GameBoardProps) {
+  const selectedVote = player.vote
+  const cards = room.estimationType === 'fibonacci' ? FIBONACCI_CARDS : HOURS_CARDS
+  const average = calculateAverage(room.players.map(p => p.vote))
 
-  const handleReveal = () => {
-    setRevealed(true)
-  }
-
-  const handleReset = () => {
-    setSelected(null)
-    setRevealed(false)
+  const handleVote = (vote: string) => {
+    onSubmitVote(vote)
   }
 
   const handleLeave = () => {
-    setSelected(null)
-    setRevealed(false)
     onLeaveGame()
-  }
-
-  const handleSelectCard = (card: string) => {
-    setSelected(card)
   }
 
   return (
@@ -87,18 +91,17 @@ export function GameBoard({ roomCode, playerName, players, estimationType, onLea
         </motion.button>
         <div className="room-info">
           <span className="room-label">ROOM</span>
-          <span className="room-code">{roomCode}</span>
+          <span className="room-code">{room.code}</span>
         </div>
         <div className="mode-badge">
-          {estimationType === 'fibonacci' ? '🌰 Fibonacci' : '⏱ Hours'}
+          {room.estimationType === 'fibonacci' ? '🌰 Fibonacci' : '⏱ Hours'}
         </div>
-        {isHost && (
+        {player.isHost && room.isRevealed && (
           <motion.button 
             className="btn btn-small" 
-            onClick={handleReset}
-            disabled={!revealed}
-            whileHover={!revealed ? {} : { scale: 1.02 }}
-            whileTap={!revealed ? {} : { scale: 0.98 }}
+            onClick={onReset}
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
           >
             NEW ROUND
           </motion.button>
@@ -112,41 +115,35 @@ export function GameBoard({ roomCode, playerName, players, estimationType, onLea
           initial="hidden"
           animate="visible"
         >
-          {players.map((player) => (
+          {room.players.map((p) => (
             <motion.div 
-              key={player.id} 
-              className={`vote-card ${player.hasVoted ? 'voted' : ''} ${revealed ? 'revealed' : ''}`}
+              key={p.id} 
+              className={`vote-card ${p.hasVoted ? 'voted' : ''}`}
               variants={playerCardVariants}
               layout
             >
               <motion.span 
                 className="vote-avatar"
                 animate={{ 
-                  backgroundColor: player.hasVoted ? 'var(--accent)' : 'var(--text-muted)'
+                  backgroundColor: p.hasVoted ? 'var(--accent)' : 'var(--text-muted)'
                 }}
                 transition={{ duration: 0.3 }}
               >
-                {player.name.charAt(0).toUpperCase()}
+                {p.name.charAt(0).toUpperCase()}
               </motion.span>
-              <span className="vote-name">{player.name}</span>
-              <AnimatePresence mode="wait">
-                <motion.span 
-                  key={revealed ? 'revealed' : 'hidden'}
-                  className="vote-value"
-                  initial={{ opacity: 0, rotateY: -90 }}
-                  animate={{ opacity: 1, rotateY: 0 }}
-                  exit={{ opacity: 0, rotateY: 90 }}
-                  transition={{ duration: 0.3, type: 'spring', stiffness: 300 }}
-                >
-                  {revealed && player.vote ? player.vote : (player.hasVoted ? '?' : '-')}
-                </motion.span>
-              </AnimatePresence>
+              <span className="vote-name">
+                {p.name}
+                {p.id === player.id && <span className="you-indicator">(You)</span>}
+              </span>
+              <span className="vote-status-badge">
+                {p.hasVoted ? '✓' : '○'}
+              </span>
             </motion.div>
           ))}
         </motion.div>
 
         <AnimatePresence mode="wait">
-          {!revealed ? (
+          {!room.isRevealed ? (
             <motion.div 
               key="selection"
               className="card-selection"
@@ -165,8 +162,8 @@ export function GameBoard({ roomCode, playerName, players, estimationType, onLea
                 {cards.map((card) => (
                   <motion.button
                     key={card}
-                    className={`card ${selected === card ? 'selected' : ''}`}
-                    onClick={() => handleSelectCard(card)}
+                    className={`card ${selectedVote === card ? 'selected' : ''}`}
+                    onClick={() => handleVote(card)}
                     variants={cardVariants}
                     whileHover={{ y: -8, scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
@@ -178,26 +175,41 @@ export function GameBoard({ roomCode, playerName, players, estimationType, onLea
               </motion.div>
               <motion.div 
                 className="selection-status"
-                key={selected || 'none'}
+                key={selectedVote || 'none'}
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ duration: 0.2 }}
               >
-                {selected ? (
-                  <p>You chose <span className="highlight">{selected}</span></p>
+                {selectedVote ? (
+                  <p>You chose <span className="highlight">{selectedVote}</span></p>
                 ) : (
                   <p>Tap a card to vote</p>
                 )}
               </motion.div>
-              <motion.button 
-                className="btn btn-primary btn-large" 
-                onClick={() => setRevealed(true)}
-                disabled={!selected}
-                whileHover={selected ? { scale: 1.02 } : {}}
-                whileTap={selected ? { scale: 0.98 } : {}}
-              >
-                SUBMIT VOTE
-              </motion.button>
+              {selectedVote && (
+                <motion.div
+                  className="voted-indicator"
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                >
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--success)" strokeWidth="2">
+                    <polyline points="20 6 9 17 4 12"/>
+                  </svg>
+                  <span>Vote submitted!</span>
+                </motion.div>
+              )}
+              {player.isHost && room.players.every(p => p.hasVoted) && (
+                <motion.button 
+                  className="btn btn-primary btn-large" 
+                  onClick={onReveal}
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                >
+                  REVEAL ALL
+                </motion.button>
+              )}
             </motion.div>
           ) : (
             <motion.div 
@@ -206,26 +218,27 @@ export function GameBoard({ roomCode, playerName, players, estimationType, onLea
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.9 }}
-              transition={{ type: 'spring', stiffness: 200, damping: 20 }}
+              transition={{ type: 'spring' as const, stiffness: 200, damping: 20 }}
             >
-              <motion.p 
-                className="reveal-hint"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.2 }}
+              <motion.h2 
+                className="revealed-title"
+                initial={{ opacity: 0, y: -20 }}
+                animate={{ opacity: 1, y: 0 }}
               >
-                All votes are in!
-              </motion.p>
-              {isHost && (
-                <motion.button 
-                  className="btn btn-primary btn-large" 
-                  onClick={handleReveal}
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                >
-                  REVEAL ALL
-                </motion.button>
-              )}
+                Results
+              </motion.h2>
+              <div className="average-card">
+                <span className="average-label">Average</span>
+                <span className="average-value">{average}</span>
+              </div>
+              <div className="votes-reveal-grid">
+                {room.players.map((p) => (
+                  <div key={p.id} className="vote-reveal-item">
+                    <span className="vote-reveal-name">{p.name}</span>
+                    <span className="vote-reveal-value">{p.vote || '-'}</span>
+                  </div>
+                ))}
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
@@ -234,12 +247,12 @@ export function GameBoard({ roomCode, playerName, players, estimationType, onLea
       <footer className="game-footer">
         <div className="votes-status">
           <motion.span
-            key={players.filter(p => p.hasVoted).length}
+            key={room.players.filter(p => p.hasVoted).length}
             initial={{ scale: 1.2, color: 'var(--accent)' }}
             animate={{ scale: 1, color: 'var(--text-muted)' }}
             transition={{ duration: 0.3 }}
           >
-            {players.filter(p => p.hasVoted).length} / {players.length} voted
+            {room.players.filter(p => p.hasVoted).length} / {room.players.length} voted
           </motion.span>
         </div>
       </footer>
