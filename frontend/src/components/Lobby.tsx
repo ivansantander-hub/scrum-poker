@@ -31,6 +31,7 @@ const playerVariants = {
 export function Lobby({ room, player, onStartGame, onJoinGame, onLeaveRoom }: LobbyProps) {
   const { language, toggleLanguage } = useGameStore()
   const [showConfirm, setShowConfirm] = useState(false)
+  const [showShareMenu, setShowShareMenu] = useState(false)
   const isHost = player.isHost
   const gameAlreadyStarted = room.isStarted
 
@@ -40,8 +41,14 @@ export function Lobby({ room, player, onStartGame, onJoinGame, onLeaveRoom }: Lo
     return url.toString()
   }
 
-  const copyCode = () => {
+  const copyCodeToClipboard = () => {
+    navigator.clipboard.writeText(room.code)
+    setShowShareMenu(false)
+  }
+
+  const copyLinkToClipboard = () => {
     navigator.clipboard.writeText(getShareUrl())
+    setShowShareMenu(false)
   }
 
   const handleLeaveClick = () => {
@@ -79,7 +86,7 @@ export function Lobby({ room, player, onStartGame, onJoinGame, onLeaveRoom }: Lo
             <span className="badge-label">{t('room', language)}</span>
             <motion.span 
               className="badge-code" 
-              onClick={copyCode} 
+              onClick={() => setShowShareMenu(true)} 
               title="Click to copy"
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
@@ -225,7 +232,7 @@ export function Lobby({ room, player, onStartGame, onJoinGame, onLeaveRoom }: Lo
         <footer className="lobby-footer">
           <motion.button 
             className="btn btn-ghost" 
-            onClick={copyCode}
+            onClick={() => setShowShareMenu(true)}
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
           >
@@ -245,6 +252,41 @@ export function Lobby({ room, player, onStartGame, onJoinGame, onLeaveRoom }: Lo
         onConfirm={handleConfirmExit}
         onCancel={() => setShowConfirm(false)}
       />
+
+      {showShareMenu && (
+        <motion.div
+          className="modal-overlay"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          onClick={() => setShowShareMenu(false)}
+        >
+          <motion.div
+            className="share-menu"
+            initial={{ opacity: 0, scale: 0.8, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.8, y: 20 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="share-menu-title">{t('shareRoomCode', language)}</h3>
+            <button className="share-menu-item" onClick={copyCodeToClipboard}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+              </svg>
+              <span>{t('copyCode', language)}</span>
+            </button>
+            <button className="share-menu-item" onClick={copyLinkToClipboard}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+              </svg>
+              <span>{t('copyLink', language)}</span>
+            </button>
+          </motion.div>
+        </motion.div>
+      )}
     </>
   )
 }

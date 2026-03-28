@@ -12,7 +12,8 @@
     "build:frontend": "pnpm -F @scrum-poker/frontend build",
     "lint": "pnpm -r run lint",
     "test": "pnpm -r run test",
-    "clean": "pnpm -r run clean && rm -rf node_modules"
+    "clean": "pnpm -r run clean && rm -rf node_modules",
+    "clean:db": "pnpm -F @scrum-poker/backend clean:db"
   },
   "devDependencies": {
     "typescript": "^5.7.3"
