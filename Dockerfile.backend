@@ -1,0 +1,23 @@
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+COPY package*.json ./
+COPY pnpm-lock.yaml ./
+RUN npm install -g pnpm && pnpm install
+
+COPY . .
+RUN pnpm build:backend
+
+FROM node:20-alpine
+
+WORKDIR /app
+
+COPY --from=builder /app/backend/package*.json ./
+COPY --from=builder /app/backend/dist ./dist
+
+RUN npm install -g pnpm && pnpm install --prod
+
+EXPOSE 3000
+
+CMD ["node", "dist/main.js"]
