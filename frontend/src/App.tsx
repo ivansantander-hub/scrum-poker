@@ -10,10 +10,25 @@ import './App.css'
 
 type View = 'rooms' | 'lobby' | 'game'
 
+const TITLES = {
+  rooms: {
+    en: 'Scrum Poker - Free Planning Poker for Agile Teams',
+    es: 'Scrum Poker - Poker de Planificación Gratuito para Equipos Ágiles'
+  },
+  lobby: {
+    en: 'Waiting Room - Scrum Poker',
+    es: 'Sala de Espera - Scrum Poker'
+  },
+  game: {
+    en: 'Voting in Progress - Scrum Poker',
+    es: 'Votación en Progreso - Scrum Poker'
+  }
+}
+
 function AppContent() {
   const [view, setView] = useState<View>('rooms')
   const [prefilledRoomCode, setPrefilledRoomCode] = useState<string | null>(null)
-  const { currentRoom, currentPlayer } = useGameStore()
+  const { currentRoom, currentPlayer, language } = useGameStore()
   const {
     error,
     gameShouldStart,
@@ -53,6 +68,31 @@ function AppContent() {
       }
     }
   }, [])
+
+  useEffect(() => {
+    const lang = language as 'en' | 'es'
+    document.title = TITLES[view][lang]
+    document.documentElement.lang = lang
+    
+    const metaDesc = document.querySelector('meta[name="description"]')
+    if (metaDesc) {
+      const descriptions = {
+        rooms: {
+          en: 'Free real-time planning poker app for agile teams. Vote on story points with Fibonacci or hours estimation. No sign-up required.',
+          es: 'App gratuita de poker de planificación en tiempo real para equipos ágiles. Vota story points con Fibonacci o horas. Sin registro.'
+        },
+        lobby: {
+          en: `Room ${currentRoom?.code || ''} - Waiting for players to join`,
+          es: `Sala ${currentRoom?.code || ''} - Esperando jugadores`
+        },
+        game: {
+          en: `Room ${currentRoom?.code || ''} - Vote for story points`,
+          es: `Sala ${currentRoom?.code || ''} - Vota los story points`
+        }
+      }
+      metaDesc.setAttribute('content', descriptions[view][lang])
+    }
+  }, [view, language, currentRoom])
 
   const handleCreateRoom = (_code: string, name: string, type: 'fibonacci' | 'hours', avatar: string) => {
     createRoom(name, type, avatar)
