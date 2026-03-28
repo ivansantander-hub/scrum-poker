@@ -6,11 +6,8 @@ export type EstimationType = 'fibonacci' | 'hours'
 interface RoomManagerProps {
   onCreateRoom: (roomCode: string, hostName: string, estimationType: EstimationType) => void
   onJoinRoom: (roomCode: string, playerName: string) => void
-}
-
-function generateRoomCode(): string {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
-  return Array.from({ length: 6 }, () => chars[Math.floor(Math.random() * chars.length)]).join('')
+  error: string | null
+  onClearError: () => void
 }
 
 const panelVariants = {
@@ -32,29 +29,29 @@ const buttonVariants = {
   })
 }
 
-export function RoomManager({ onCreateRoom, onJoinRoom }: RoomManagerProps) {
+export function RoomManager({ onCreateRoom, onJoinRoom, error, onClearError }: RoomManagerProps) {
   const [mode, setMode] = useState<'choice' | 'create' | 'join'>('choice')
   const [roomCode, setRoomCode] = useState('')
   const [playerName, setPlayerName] = useState('')
   const [estimationType, setEstimationType] = useState<EstimationType>('fibonacci')
-  const [error, setError] = useState('')
+  const [localError, setLocalError] = useState('')
 
   const handleCreate = () => {
     if (!playerName.trim()) {
-      setError('Enter your name')
+      setLocalError('Enter your name')
       return
     }
-    const code = generateRoomCode()
+    const code = 'TMP'
     onCreateRoom(code, playerName.trim(), estimationType)
   }
 
   const handleJoin = () => {
     if (!playerName.trim()) {
-      setError('Enter your name')
+      setLocalError('Enter your name')
       return
     }
     if (roomCode.length !== 6) {
-      setError('Room code must be 6 characters')
+      setLocalError('Room code must be 6 characters')
       return
     }
     onJoinRoom(roomCode.toUpperCase(), playerName.trim())
@@ -62,11 +59,14 @@ export function RoomManager({ onCreateRoom, onJoinRoom }: RoomManagerProps) {
 
   const resetForm = () => {
     setMode('choice')
-    setError('')
+    setLocalError('')
     setPlayerName('')
     setRoomCode('')
     setEstimationType('fibonacci')
+    onClearError()
   }
+
+  const displayError = localError || error
 
   return (
     <div className="room-manager">
@@ -184,7 +184,7 @@ export function RoomManager({ onCreateRoom, onJoinRoom }: RoomManagerProps) {
                 <input
                   type="text"
                   value={playerName}
-                  onChange={(e) => { setPlayerName(e.target.value); setError(''); }}
+                  onChange={(e) => { setPlayerName(e.target.value); setLocalError(''); onClearError(); }}
                   placeholder="Enter your name"
                   maxLength={20}
                   autoFocus
@@ -221,14 +221,14 @@ export function RoomManager({ onCreateRoom, onJoinRoom }: RoomManagerProps) {
                 </div>
               </motion.div>
               <AnimatePresence>
-                {error && (
+                {displayError && (
                   <motion.p 
                     className="error"
                     initial={{ opacity: 0, y: -10 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -10 }}
                   >
-                    {error}
+                    {displayError}
                   </motion.p>
                 )}
               </AnimatePresence>
@@ -280,7 +280,7 @@ export function RoomManager({ onCreateRoom, onJoinRoom }: RoomManagerProps) {
                 <input
                   type="text"
                   value={roomCode}
-                  onChange={(e) => { setRoomCode(e.target.value.toUpperCase().slice(0, 6)); setError(''); }}
+                  onChange={(e) => { setRoomCode(e.target.value.toUpperCase().slice(0, 6)); setLocalError(''); onClearError(); }}
                   placeholder="XXXXXX"
                   maxLength={6}
                   className="code-input"
@@ -297,20 +297,20 @@ export function RoomManager({ onCreateRoom, onJoinRoom }: RoomManagerProps) {
                 <input
                   type="text"
                   value={playerName}
-                  onChange={(e) => { setPlayerName(e.target.value); setError(''); }}
+                  onChange={(e) => { setPlayerName(e.target.value); setLocalError(''); onClearError(); }}
                   placeholder="Enter your name"
                   maxLength={20}
                 />
               </motion.div>
               <AnimatePresence>
-                {error && (
+                {displayError && (
                   <motion.p 
                     className="error"
                     initial={{ opacity: 0, y: -10 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -10 }}
                   >
-                    {error}
+                    {displayError}
                   </motion.p>
                 )}
               </AnimatePresence>
