@@ -1,3 +1,7 @@
 packages:
   - 'backend'
   - 'frontend'
+
+onlyBuiltDependencies:
+  - sqlite3
+  - sharp

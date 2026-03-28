@@ -4,6 +4,7 @@ import { type Room, type Player } from '../hooks/useGameStore'
 import { useGameStore } from '../hooks/useGameStore'
 import { t } from '../i18n'
 import { ConfirmDialog } from './ConfirmDialog'
+import { AvatarPreviewModal } from './AvatarPreviewModal'
 
 interface GameBoardProps {
   room: Room
@@ -64,10 +65,39 @@ function calculateAverage(votes: (string | undefined)[]): string {
   return Number.isInteger(avg) ? avg.toString() : avg.toFixed(1)
 }
 
+function PlayerAvatar({ name, avatar, hasVoted, onDoubleClick }: { name: string; avatar: string; hasVoted: boolean; onDoubleClick?: () => void }) {
+  const [imgError, setImgError] = useState(false)
+  const avatarSrc = `/characters/${avatar || 'vincent.webp'}`
+  
+  return (
+    <div className="vote-avatar-wrapper" onDoubleClick={onDoubleClick}>
+      {!imgError && (
+        <img 
+          src={avatarSrc}
+          alt={name}
+          className="vote-avatar-img"
+          onError={() => setImgError(true)}
+        />
+      )}
+      <motion.span 
+        className="vote-avatar-initial"
+        animate={{ 
+          backgroundColor: hasVoted ? 'var(--accent)' : 'var(--text-muted)'
+        }}
+        transition={{ duration: 0.3 }}
+        style={{ display: imgError ? 'flex' : 'none' }}
+      >
+        {name.charAt(0).toUpperCase()}
+      </motion.span>
+    </div>
+  )
+}
+
 export function GameBoard({ room, player, onLeaveGame, onSubmitVote, onReveal, onReset }: GameBoardProps) {
   const { language, toggleLanguage, clearLocalVote, triggerClearLocalVote } = useGameStore()
   const [showConfirm, setShowConfirm] = useState(false)
   const [localSelectedVote, setLocalSelectedVote] = useState<string | undefined>(player.vote)
+  const [previewAvatar, setPreviewAvatar] = useState<string | null>(null)
   const selectedVote = localSelectedVote || player.vote
   const cards = room.estimationType === 'fibonacci' ? FIBONACCI_CARDS : HOURS_CARDS
   const average = calculateAverage(room.players.map(p => p.vote))
@@ -155,15 +185,7 @@ export function GameBoard({ room, player, onLeaveGame, onSubmitVote, onReveal, o
               variants={playerCardVariants}
               layout
             >
-              <motion.span 
-                className="vote-avatar"
-                animate={{ 
-                  backgroundColor: p.hasVoted ? 'var(--accent)' : 'var(--text-muted)'
-                }}
-                transition={{ duration: 0.3 }}
-              >
-                {p.name.charAt(0).toUpperCase()}
-              </motion.span>
+              <PlayerAvatar name={p.name} avatar={p.avatar} hasVoted={p.hasVoted} onDoubleClick={() => setPreviewAvatar(p.avatar)} />
               <span className="vote-name">
                 {p.name}
                 {p.id === player.id && <span className="you-indicator">({t('you', language)})</span>}
@@ -298,6 +320,7 @@ export function GameBoard({ room, player, onLeaveGame, onSubmitVote, onReveal, o
       onConfirm={handleConfirmExit}
       onCancel={() => setShowConfirm(false)}
     />
+    <AvatarPreviewModal avatar={previewAvatar} onClose={() => setPreviewAvatar(null)} />
     </>
   )
 }

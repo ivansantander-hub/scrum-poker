@@ -2,12 +2,13 @@ import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useGameStore } from '../hooks/useGameStore'
 import { t } from '../i18n'
+import { AvatarSelector } from './AvatarSelector'
 
 export type EstimationType = 'fibonacci' | 'hours'
 
 interface RoomManagerProps {
-  onCreateRoom: (roomCode: string, hostName: string, estimationType: EstimationType) => void
-  onJoinRoom: (roomCode: string, playerName: string) => void
+  onCreateRoom: (roomCode: string, hostName: string, estimationType: EstimationType, avatarId: string) => void
+  onJoinRoom: (roomCode: string, playerName: string, avatarId: string) => void
   error: string | null
   onClearError: () => void
   prefilledRoomCode?: string | null
@@ -36,9 +37,15 @@ export function RoomManager({ onCreateRoom, onJoinRoom, error, onClearError, pre
   const [mode, setMode] = useState<'choice' | 'create' | 'join'>(() => prefilledRoomCode ? 'join' : 'choice')
   const [roomCode, setRoomCode] = useState(prefilledRoomCode || '')
   const [playerName, setPlayerName] = useState('')
+  const [selectedAvatar, setSelectedAvatar] = useState('vincent')
   const [estimationType, setEstimationType] = useState<EstimationType>('fibonacci')
   const [localError, setLocalError] = useState('')
-  const { language, toggleLanguage } = useGameStore()
+  const { language, toggleLanguage, savedName, savedAvatar, saveUserPreferences } = useGameStore()
+
+  useEffect(() => {
+    if (savedName) setPlayerName(savedName)
+    if (savedAvatar) setSelectedAvatar(savedAvatar)
+  }, [])
 
   useEffect(() => {
     if (prefilledRoomCode) {
@@ -52,8 +59,9 @@ export function RoomManager({ onCreateRoom, onJoinRoom, error, onClearError, pre
       setLocalError(t('enterYourName', language))
       return
     }
+    saveUserPreferences(playerName.trim(), selectedAvatar)
     const code = 'TMP'
-    onCreateRoom(code, playerName.trim(), estimationType)
+    onCreateRoom(code, playerName.trim(), estimationType, selectedAvatar)
   }
 
   const handleJoin = () => {
@@ -65,7 +73,8 @@ export function RoomManager({ onCreateRoom, onJoinRoom, error, onClearError, pre
       setLocalError(t('roomCodeMustBe6', language))
       return
     }
-    onJoinRoom(roomCode.toUpperCase(), playerName.trim())
+    saveUserPreferences(playerName.trim(), selectedAvatar)
+    onJoinRoom(roomCode.toUpperCase(), playerName.trim(), selectedAvatar)
   }
 
   const resetForm = () => {
@@ -210,6 +219,13 @@ export function RoomManager({ onCreateRoom, onJoinRoom, error, onClearError, pre
                   autoFocus
                 />
               </motion.div>
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.15 }}
+              >
+                <AvatarSelector selectedAvatar={selectedAvatar} onSelect={setSelectedAvatar} />
+              </motion.div>
               <motion.div 
                 className="form-group"
                 initial={{ opacity: 0, y: 10 }}
@@ -321,6 +337,13 @@ export function RoomManager({ onCreateRoom, onJoinRoom, error, onClearError, pre
                   placeholder={t('enterYourName', language)}
                   maxLength={20}
                 />
+              </motion.div>
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.25 }}
+              >
+                <AvatarSelector selectedAvatar={selectedAvatar} onSelect={setSelectedAvatar} />
               </motion.div>
               <AnimatePresence>
                 {displayError && (

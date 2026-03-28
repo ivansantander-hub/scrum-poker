@@ -5,6 +5,7 @@ import type { Language } from '../i18n'
 export interface Player {
   id: string
   name: string
+  avatar: string
   isHost: boolean
   hasVoted: boolean
   vote?: string
@@ -27,6 +28,8 @@ interface GameState {
   isConnected: boolean
   language: Language
   clearLocalVote: boolean
+  savedName: string
+  savedAvatar: string
   
   setRoom: (room: Room | null) => void
   setPlayer: (player: Player | null) => void
@@ -38,6 +41,7 @@ interface GameState {
   updateRoom: (room: Room) => void
   toggleLanguage: () => void
   triggerClearLocalVote: () => void
+  saveUserPreferences: (name: string, avatar: string) => void
   reset: () => void
 }
 
@@ -50,6 +54,8 @@ export const useGameStore = create<GameState>()(
       isConnected: false,
       language: 'en',
       clearLocalVote: false,
+      savedName: '',
+      savedAvatar: '',
 
       setRoom: (room) => set({ currentRoom: room }),
       
@@ -104,6 +110,8 @@ export const useGameStore = create<GameState>()(
       
       triggerClearLocalVote: () => set({ clearLocalVote: true }),
       
+      saveUserPreferences: (name, avatar) => set({ savedName: name, savedAvatar: avatar }),
+      
       reset: () => set({ currentRoom: null, currentPlayer: null, socketId: null, isConnected: false, clearLocalVote: false }),
     }),
     {
@@ -113,6 +121,8 @@ export const useGameStore = create<GameState>()(
         currentPlayer: state.currentPlayer,
         socketId: state.socketId,
         language: state.language,
+        savedName: state.savedName,
+        savedAvatar: state.savedAvatar,
       }),
     }
   )

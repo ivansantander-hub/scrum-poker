@@ -47,6 +47,8 @@ export const translations = {
     joinGame: 'JOIN GAME',
     copyCode: 'Copy room code',
     copyLink: 'Copy invite link',
+    selectAvatar: 'Choose your avatar',
+    refresh: 'Refresh',
   },
   es: {
     online: 'En línea',
@@ -94,6 +96,8 @@ export const translations = {
     joinGame: 'UNIRSE AL JUEGO',
     copyCode: 'Copiar código de sala',
     copyLink: 'Copiar enlace de invitación',
+    selectAvatar: 'Elige tu avatar',
+    refresh: 'Refrescar',
   },
 } as const
 

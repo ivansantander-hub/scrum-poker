@@ -4,6 +4,8 @@ import { type Room, type Player } from '../hooks/useGameStore'
 import { useGameStore } from '../hooks/useGameStore'
 import { t } from '../i18n'
 import { ConfirmDialog } from './ConfirmDialog'
+import { AvatarPreviewModal } from './AvatarPreviewModal'
+import './AvatarSelector.css'
 
 interface LobbyProps {
   room: Room
@@ -32,6 +34,7 @@ export function Lobby({ room, player, onStartGame, onJoinGame, onLeaveRoom }: Lo
   const { language, toggleLanguage } = useGameStore()
   const [showConfirm, setShowConfirm] = useState(false)
   const [showShareMenu, setShowShareMenu] = useState(false)
+  const [previewAvatar, setPreviewAvatar] = useState<string | null>(null)
   const isHost = player.isHost
   const gameAlreadyStarted = room.isStarted
 
@@ -140,15 +143,16 @@ export function Lobby({ room, player, onStartGame, onJoinGame, onLeaveRoom }: Lo
                     exit="exit"
                     layout
                   >
-                    <motion.span 
-                      className="player-avatar"
-                      animate={{ 
-                        backgroundColor: p.hasVoted ? 'var(--success)' : 'var(--accent)'
-                      }}
-                      transition={{ duration: 0.3 }}
-                    >
-                      {p.name.charAt(0).toUpperCase()}
-                    </motion.span>
+                    <div className="player-avatar-wrapper" onDoubleClick={() => setPreviewAvatar(p.avatar)}>
+                      <img 
+                        src={`/characters/${p.avatar || 'vincent.webp'}`}
+                        alt={p.name}
+                        className="player-avatar-img"
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none'
+                        }}
+                      />
+                    </div>
                     <span className="player-name">
                       {p.name}
                       {p.isHost && <span className="host-badge">{t('host', language)}</span>}
@@ -287,6 +291,7 @@ export function Lobby({ room, player, onStartGame, onJoinGame, onLeaveRoom }: Lo
           </motion.div>
         </motion.div>
       )}
+      <AvatarPreviewModal avatar={previewAvatar} onClose={() => setPreviewAvatar(null)} />
     </>
   )
 }

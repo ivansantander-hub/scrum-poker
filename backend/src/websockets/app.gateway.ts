@@ -13,6 +13,7 @@ export interface Player {
   id: string;
   socketId: string;
   name: string;
+  avatar: string;
   isHost: boolean;
   hasVoted: boolean;
   vote?: string;
@@ -41,8 +42,8 @@ interface ServerToClientEvents {
 }
 
 interface ClientToServerEvents {
-  createRoom: (data: { playerName: string; estimationType: 'fibonacci' | 'hours' }, callback: (response: { success: boolean; room?: Room; player?: Player; error?: string }) => void) => void;
-  joinRoom: (data: { roomCode: string; playerName: string }, callback: (response: { success: boolean; room?: Room; player?: Player; error?: string }) => void) => void;
+  createRoom: (data: { playerName: string; estimationType: 'fibonacci' | 'hours'; avatar: string }, callback: (response: { success: boolean; room?: Room; player?: Player; error?: string }) => void) => void;
+  joinRoom: (data: { roomCode: string; playerName: string; avatar: string }, callback: (response: { success: boolean; room?: Room; player?: Player; error?: string }) => void) => void;
   rejoinRoom: (data: { roomCode: string; playerId: string; playerName: string }, callback: (response: { success: boolean; room?: Room; player?: Player; error?: string }) => void) => void;
   leaveRoom: (data: { roomCode: string; playerId: string }) => void;
   startGame: (data: { roomCode: string; playerId: string }) => void;
@@ -108,6 +109,7 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
         id: p.id,
         socketId: p.socket_id || '',
         name: p.name,
+        avatar: p.avatar || 'vincent',
         isHost: !!p.is_host,
         hasVoted: !!p.has_voted,
         vote: p.vote || undefined,
@@ -119,19 +121,20 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   @SubscribeMessage('createRoom')
-  async handleCreateRoom(client: Socket, data: { playerName: string; estimationType: 'fibonacci' | 'hours' }) {
+  async handleCreateRoom(client: Socket, data: { playerName: string; estimationType: 'fibonacci' | 'hours'; avatar: string }) {
     try {
       const roomCode = this.generateRoomCode();
       const playerId = this.generatePlayerId();
       const roomId = this.generatePlayerId();
 
       await this.roomRepository.create(roomId, roomCode, data.estimationType, playerId);
-      await this.playerRepository.create(playerId, roomId, data.playerName, true, client.id);
+      await this.playerRepository.create(playerId, roomId, data.playerName, data.avatar, true, client.id);
 
       const player: Player = {
         id: playerId,
         socketId: client.id,
         name: data.playerName,
+        avatar: data.avatar,
         isHost: true,
         hasVoted: false,
       };
@@ -154,7 +157,7 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   @SubscribeMessage('joinRoom')
-  async handleJoinRoom(client: Socket, data: { roomCode: string; playerName: string }) {
+  async handleJoinRoom(client: Socket, data: { roomCode: string; playerName: string; avatar: string }) {
     try {
       const room = await this.roomRepository.findByCode(data.roomCode.toUpperCase());
 
@@ -163,12 +166,13 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
       }
 
       const playerId = this.generatePlayerId();
-      await this.playerRepository.create(playerId, room.id, data.playerName, false, client.id);
+      await this.playerRepository.create(playerId, room.id, data.playerName, data.avatar, false, client.id);
 
       const player: Player = {
         id: playerId,
         socketId: client.id,
         name: data.playerName,
+        avatar: data.avatar,
         isHost: false,
         hasVoted: false,
       };
@@ -205,6 +209,7 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
           id: existingPlayer.id,
           socketId: client.id,
           name: existingPlayer.name,
+          avatar: existingPlayer.avatar || 'vincent',
           isHost: !!existingPlayer.is_host,
           hasVoted: !!existingPlayer.has_voted,
           vote: existingPlayer.vote || undefined,
@@ -221,12 +226,13 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
       }
 
       const newPlayerId = this.generatePlayerId();
-      await this.playerRepository.create(newPlayerId, room.id, data.playerName, false, client.id);
+      await this.playerRepository.create(newPlayerId, room.id, data.playerName, 'vincent', false, client.id);
 
       const player: Player = {
         id: newPlayerId,
         socketId: client.id,
         name: data.playerName,
+        avatar: 'vincent',
         isHost: false,
         hasVoted: false,
       };

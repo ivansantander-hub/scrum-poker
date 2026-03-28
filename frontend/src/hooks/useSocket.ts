@@ -139,10 +139,10 @@ export function useSocket() {
     }
   }, [setConnected, setSocketId, setPlayer, setRoom, addPlayer, removePlayer])
 
-  const createRoom = useCallback((playerName: string, estimationType: 'fibonacci' | 'hours') => {
+  const createRoom = useCallback((playerName: string, estimationType: 'fibonacci' | 'hours', avatar: string) => {
     const socket = getSocket()
     setError(null)
-    socket.emit('createRoom', { playerName, estimationType }, (response) => {
+    socket.emit('createRoom', { playerName, estimationType, avatar }, (response) => {
       if (response.success && response.room && response.player) {
         setRoom(response.room)
         setPlayer(response.player)
@@ -152,10 +152,10 @@ export function useSocket() {
     })
   }, [setRoom, setPlayer])
 
-  const joinRoom = useCallback((roomCode: string, playerName: string) => {
+  const joinRoom = useCallback((roomCode: string, playerName: string, avatar: string) => {
     const socket = getSocket()
     setError(null)
-    socket.emit('joinRoom', { roomCode: roomCode.toUpperCase(), playerName }, (response) => {
+    socket.emit('joinRoom', { roomCode: roomCode.toUpperCase(), playerName, avatar }, (response) => {
       if (response.success && response.room && response.player) {
         setRoom(response.room)
         setPlayer(response.player)
