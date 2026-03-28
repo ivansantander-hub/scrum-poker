@@ -6,6 +6,8 @@ import {
   SubscribeMessage,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
+import { RoomRepository } from '../database/room.repository';
+import { PlayerRepository } from '../database/player.repository';
 
 export interface Player {
   id: string;
@@ -41,11 +43,12 @@ interface ServerToClientEvents {
 interface ClientToServerEvents {
   createRoom: (data: { playerName: string; estimationType: 'fibonacci' | 'hours' }, callback: (response: { success: boolean; room?: Room; player?: Player; error?: string }) => void) => void;
   joinRoom: (data: { roomCode: string; playerName: string }, callback: (response: { success: boolean; room?: Room; player?: Player; error?: string }) => void) => void;
+  rejoinRoom: (data: { roomCode: string; playerId: string; playerName: string }, callback: (response: { success: boolean; room?: Room; player?: Player; error?: string }) => void) => void;
   leaveRoom: (data: { roomCode: string; playerId: string }) => void;
-  startGame: (data: { roomCode: string }) => void;
+  startGame: (data: { roomCode: string; playerId: string }) => void;
   submitVote: (data: { roomCode: string; playerId: string; vote: string }) => void;
-  revealVotes: (data: { roomCode: string }) => void;
-  resetRound: (data: { roomCode: string }) => void;
+  revealVotes: (data: { roomCode: string; playerId: string }) => void;
+  resetRound: (data: { roomCode: string; playerId: string }) => void;
 }
 
 @WebSocketGateway({
@@ -58,7 +61,12 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
   server: Server;
 
-  private rooms: Map<string, Room> = new Map();
+  private socketToPlayer: Map<string, { roomId: string; playerId: string }> = new Map();
+
+  constructor(
+    private roomRepository: RoomRepository,
+    private playerRepository: PlayerRepository,
+  ) {}
 
   handleConnection(client: Socket) {
     console.log(`Client connected: ${client.id}`);
@@ -66,26 +74,20 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   handleDisconnect(client: Socket) {
     console.log(`Client disconnected: ${client.id}`);
-    this.handlePlayerDisconnect(client.id);
+    const playerInfo = this.socketToPlayer.get(client.id);
+    if (playerInfo) {
+      this.handlePlayerDisconnect(playerInfo.roomId, playerInfo.playerId);
+      this.socketToPlayer.delete(client.id);
+    }
   }
 
-  private handlePlayerDisconnect(socketId: string) {
-    this.rooms.forEach((room, roomCode) => {
-      const playerIndex = room.players.findIndex((p) => p.socketId === socketId);
-      if (playerIndex !== -1) {
-        const player = room.players[playerIndex];
-        room.players.splice(playerIndex, 1);
-        this.server.to(roomCode).emit('playerLeft', { playerId: player.id });
-
-        if (room.players.length === 0) {
-          this.rooms.delete(roomCode);
-        } else if (player.isHost && room.players.length > 0) {
-          room.players[0].isHost = true;
-          room.hostId = room.players[0].id;
-          this.server.to(roomCode).emit('roomState', { room });
-        }
-      }
-    });
+  private async handlePlayerDisconnect(roomId: string, playerId: string) {
+    try {
+      await this.playerRepository.clearSocketId(playerId);
+      this.server.to(roomId).emit('playerLeft', { playerId });
+    } catch (error) {
+      console.error('Error handling player disconnect:', error);
+    }
   }
 
   private generateRoomCode(): string {
@@ -97,146 +99,271 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
     return Math.random().toString(36).substring(2, 11);
   }
 
+  private async buildRoomFromDb(roomRow: any): Promise<Room> {
+    const players = await this.playerRepository.findByRoomId(roomRow.id);
+    return {
+      code: roomRow.code,
+      estimationType: roomRow.estimation_type as 'fibonacci' | 'hours',
+      players: players.map(p => ({
+        id: p.id,
+        socketId: p.socket_id || '',
+        name: p.name,
+        isHost: !!p.is_host,
+        hasVoted: !!p.has_voted,
+        vote: p.vote || undefined,
+      })),
+      isRevealed: !!roomRow.is_revealed,
+      isStarted: !!roomRow.is_started,
+      hostId: roomRow.host_id,
+    };
+  }
+
   @SubscribeMessage('createRoom')
-  handleCreateRoom(client: Socket, data: { playerName: string; estimationType: 'fibonacci' | 'hours' }) {
-    const roomCode = this.generateRoomCode();
-    const playerId = this.generatePlayerId();
-    const player: Player = {
-      id: playerId,
-      socketId: client.id,
-      name: data.playerName,
-      isHost: true,
-      hasVoted: false,
-    };
+  async handleCreateRoom(client: Socket, data: { playerName: string; estimationType: 'fibonacci' | 'hours' }) {
+    try {
+      const roomCode = this.generateRoomCode();
+      const playerId = this.generatePlayerId();
+      const roomId = this.generatePlayerId();
 
-    const room: Room = {
-      code: roomCode,
-      estimationType: data.estimationType,
-      players: [player],
-      isRevealed: false,
-      isStarted: false,
-      hostId: playerId,
-    };
+      await this.roomRepository.create(roomId, roomCode, data.estimationType, playerId);
+      await this.playerRepository.create(playerId, roomId, data.playerName, true, client.id);
 
-    this.rooms.set(roomCode, room);
-    client.join(roomCode);
+      const player: Player = {
+        id: playerId,
+        socketId: client.id,
+        name: data.playerName,
+        isHost: true,
+        hasVoted: false,
+      };
 
-    client.emit('roomCreated', { roomCode, player });
-    client.emit('roomState', { room });
+      const room = await this.roomRepository.findById(roomId);
+      if (room) {
+        const fullRoom = await this.buildRoomFromDb(room);
+        client.join(roomCode);
+        this.socketToPlayer.set(client.id, { roomId, playerId });
+        client.emit('roomCreated', { roomCode, player });
+        client.emit('roomState', { room: fullRoom });
+        return { success: true, room: fullRoom, player };
+      }
 
-    return { success: true, room, player };
+      return { success: false, error: 'Failed to create room' };
+    } catch (error) {
+      console.error('Error creating room:', error);
+      return { success: false, error: 'Failed to create room' };
+    }
   }
 
   @SubscribeMessage('joinRoom')
-  handleJoinRoom(client: Socket, data: { roomCode: string; playerName: string }) {
-    const room = this.rooms.get(data.roomCode.toUpperCase());
+  async handleJoinRoom(client: Socket, data: { roomCode: string; playerName: string }) {
+    try {
+      const room = await this.roomRepository.findByCode(data.roomCode.toUpperCase());
 
-    if (!room) {
-      return { success: false, error: 'Room not found' };
+      if (!room) {
+        return { success: false, error: 'Room not found' };
+      }
+
+      const playerId = this.generatePlayerId();
+      await this.playerRepository.create(playerId, room.id, data.playerName, false, client.id);
+
+      const player: Player = {
+        id: playerId,
+        socketId: client.id,
+        name: data.playerName,
+        isHost: false,
+        hasVoted: false,
+      };
+
+      const fullRoom = await this.buildRoomFromDb(room);
+      client.join(room.code);
+      this.socketToPlayer.set(client.id, { roomId: room.id, playerId });
+      client.emit('roomJoined', { room: fullRoom, player });
+      client.to(room.code).emit('playerJoined', { player });
+      client.to(room.code).emit('roomState', { room: fullRoom });
+
+      return { success: true, room: fullRoom, player };
+    } catch (error) {
+      console.error('Error joining room:', error);
+      return { success: false, error: 'Failed to join room' };
     }
+  }
 
-    const playerId = this.generatePlayerId();
-    const player: Player = {
-      id: playerId,
-      socketId: client.id,
-      name: data.playerName,
-      isHost: false,
-      hasVoted: false,
-    };
+  @SubscribeMessage('rejoinRoom')
+  async handleRejoinRoom(client: Socket, data: { roomCode: string; playerId: string; playerName: string }) {
+    try {
+      const room = await this.roomRepository.findByCode(data.roomCode.toUpperCase());
 
-    room.players.push(player);
-    client.join(room.code);
+      if (!room) {
+        return { success: false, error: 'Room not found' };
+      }
 
-    client.emit('roomJoined', { room, player });
-    client.to(room.code).emit('playerJoined', { player });
-    client.to(room.code).emit('roomState', { room });
+      const existingPlayer = await this.playerRepository.findByRoomIdAndPlayerId(room.id, data.playerId);
 
-    return { success: true, room, player };
+      if (existingPlayer) {
+        await this.playerRepository.updateSocketId(data.playerId, client.id);
+        
+        const player: Player = {
+          id: existingPlayer.id,
+          socketId: client.id,
+          name: existingPlayer.name,
+          isHost: !!existingPlayer.is_host,
+          hasVoted: !!existingPlayer.has_voted,
+          vote: existingPlayer.vote || undefined,
+        };
+
+        const fullRoom = await this.buildRoomFromDb(room);
+        client.join(room.code);
+        this.socketToPlayer.set(client.id, { roomId: room.id, playerId: data.playerId });
+        client.emit('roomJoined', { room: fullRoom, player });
+        client.to(room.code).emit('playerJoined', { player });
+        client.to(room.code).emit('roomState', { room: fullRoom });
+
+        return { success: true, room: fullRoom, player };
+      }
+
+      const newPlayerId = this.generatePlayerId();
+      await this.playerRepository.create(newPlayerId, room.id, data.playerName, false, client.id);
+
+      const player: Player = {
+        id: newPlayerId,
+        socketId: client.id,
+        name: data.playerName,
+        isHost: false,
+        hasVoted: false,
+      };
+
+      const fullRoom = await this.buildRoomFromDb(room);
+      client.join(room.code);
+      this.socketToPlayer.set(client.id, { roomId: room.id, playerId: newPlayerId });
+      client.emit('roomJoined', { room: fullRoom, player });
+      client.to(room.code).emit('playerJoined', { player });
+      client.to(room.code).emit('roomState', { room: fullRoom });
+
+      return { success: true, room: fullRoom, player };
+    } catch (error) {
+      console.error('Error rejoining room:', error);
+      return { success: false, error: 'Failed to rejoin room' };
+    }
   }
 
   @SubscribeMessage('leaveRoom')
-  handleLeaveRoom(client: Socket, data: { roomCode: string; playerId: string }) {
-    const room = this.rooms.get(data.roomCode);
+  async handleLeaveRoom(client: Socket, data: { roomCode: string; playerId: string }) {
+    try {
+      const room = await this.roomRepository.findByCode(data.roomCode);
+      if (!room) return;
 
-    if (!room) return;
+      const player = await this.playerRepository.findByRoomIdAndPlayerId(room.id, data.playerId);
+      if (!player) return;
 
-    const playerIndex = room.players.findIndex((p) => p.id === data.playerId);
-    if (playerIndex !== -1) {
-      const player = room.players[playerIndex];
-      room.players.splice(playerIndex, 1);
+      await this.playerRepository.delete(data.playerId);
+      this.socketToPlayer.delete(client.id);
       client.leave(room.code);
-      client.emit('roomState', { room: { ...room, players: [] } });
 
-      this.server.to(room.code).emit('playerLeft', { playerId: player.id });
-
-      if (room.players.length === 0) {
-        this.rooms.delete(room.code);
-      } else if (player.isHost && room.players.length > 0) {
-        room.players[0].isHost = true;
-        room.hostId = room.players[0].id;
-        this.server.to(room.code).emit('roomState', { room });
+      const remainingPlayers = await this.playerRepository.findByRoomId(room.id);
+      
+      if (remainingPlayers.length === 0) {
+        await this.roomRepository.delete(room.id);
+      } else if (player.is_host) {
+        const newHost = remainingPlayers[0];
+        await this.playerRepository.updateHostByRoomId(room.id, newHost.id);
+        const updatedRoom = await this.roomRepository.findById(room.id);
+        if (updatedRoom) {
+          const fullRoom = await this.buildRoomFromDb(updatedRoom);
+          this.server.to(room.code).emit('roomState', { room: fullRoom });
+        }
       }
+
+      this.server.to(room.code).emit('playerLeft', { playerId: data.playerId });
+      
+      const updatedRoom = await this.roomRepository.findById(room.id);
+      if (updatedRoom) {
+        const fullRoom = await this.buildRoomFromDb(updatedRoom);
+        client.emit('roomState', { room: { ...fullRoom, players: [] } });
+        this.server.to(room.code).emit('roomState', { room: fullRoom });
+      }
+    } catch (error) {
+      console.error('Error leaving room:', error);
     }
   }
 
   @SubscribeMessage('startGame')
-  handleStartGame(client: Socket, data: { roomCode: string }) {
-    const room = this.rooms.get(data.roomCode);
+  async handleStartGame(client: Socket, data: { roomCode: string; playerId: string }) {
+    try {
+      const room = await this.roomRepository.findByCode(data.roomCode);
+      if (!room) return;
 
-    if (!room) return;
+      const player = await this.playerRepository.findByRoomIdAndPlayerId(room.id, data.playerId);
+      if (!player?.is_host) return;
 
-    const player = room.players.find((p) => p.socketId === client.id);
-    if (!player?.isHost) return;
-
-    room.isStarted = true;
-    this.server.to(room.code).emit('gameStarted');
-    client.emit('gameStarted');
+      await this.roomRepository.updateIsStarted(room.id, true);
+      const updatedRoom = await this.roomRepository.findById(room.id);
+      
+      if (updatedRoom) {
+        const fullRoom = await this.buildRoomFromDb(updatedRoom);
+        this.server.to(room.code).emit('gameStarted');
+        client.emit('gameStarted');
+      }
+    } catch (error) {
+      console.error('Error starting game:', error);
+    }
   }
 
   @SubscribeMessage('submitVote')
-  handleSubmitVote(client: Socket, data: { roomCode: string; playerId: string; vote: string }) {
-    const room = this.rooms.get(data.roomCode);
+  async handleSubmitVote(client: Socket, data: { roomCode: string; playerId: string; vote: string }) {
+    try {
+      const room = await this.roomRepository.findByCode(data.roomCode);
+      if (!room) return;
 
-    if (!room) return;
-
-    const player = room.players.find((p) => p.id === data.playerId);
-    if (player) {
-      player.vote = data.vote;
-      player.hasVoted = true;
-      this.server.to(room.code).emit('voteUpdated', { playerId: player.id, vote: data.vote });
-      this.server.to(room.code).emit('roomState', { room });
+      await this.playerRepository.updateVote(data.playerId, data.vote);
+      
+      const updatedRoom = await this.roomRepository.findById(room.id);
+      if (updatedRoom) {
+        const fullRoom = await this.buildRoomFromDb(updatedRoom);
+        this.server.to(room.code).emit('voteUpdated', { playerId: data.playerId, vote: data.vote });
+        this.server.to(room.code).emit('roomState', { room: fullRoom });
+      }
+    } catch (error) {
+      console.error('Error submitting vote:', error);
     }
   }
 
   @SubscribeMessage('revealVotes')
-  handleRevealVotes(client: Socket, data: { roomCode: string }) {
-    const room = this.rooms.get(data.roomCode);
+  async handleRevealVotes(client: Socket, data: { roomCode: string; playerId: string }) {
+    try {
+      const room = await this.roomRepository.findByCode(data.roomCode);
+      if (!room) return;
 
-    if (!room) return;
+      const player = await this.playerRepository.findByRoomIdAndPlayerId(room.id, data.playerId);
+      if (!player?.is_host) return;
 
-    const player = room.players.find((p) => p.socketId === client.id);
-    if (!player?.isHost) return;
-
-    room.isRevealed = true;
-    this.server.to(room.code).emit('votesRevealed', { room });
+      await this.roomRepository.updateIsRevealed(room.id, true);
+      const updatedRoom = await this.roomRepository.findById(room.id);
+      
+      if (updatedRoom) {
+        const fullRoom = await this.buildRoomFromDb(updatedRoom);
+        this.server.to(room.code).emit('votesRevealed', { room: fullRoom });
+      }
+    } catch (error) {
+      console.error('Error revealing votes:', error);
+    }
   }
 
   @SubscribeMessage('resetRound')
-  handleResetRound(client: Socket, data: { roomCode: string }) {
-    const room = this.rooms.get(data.roomCode);
+  async handleResetRound(client: Socket, data: { roomCode: string; playerId: string }) {
+    try {
+      const room = await this.roomRepository.findByCode(data.roomCode);
+      if (!room) return;
 
-    if (!room) return;
+      await this.roomRepository.updateIsRevealed(room.id, false);
+      await this.playerRepository.resetVotesByRoomId(room.id);
 
-    const player = room.players.find((p) => p.socketId === client.id);
-    if (!player?.isHost) return;
-
-    room.isRevealed = false;
-    room.players.forEach((p) => {
-      p.hasVoted = false;
-      p.vote = undefined;
-    });
-
-    this.server.to(room.code).emit('roomReset');
-    this.server.to(room.code).emit('roomState', { room });
+      const updatedRoom = await this.roomRepository.findById(room.id);
+      if (updatedRoom) {
+        const fullRoom = await this.buildRoomFromDb(updatedRoom);
+        this.server.to(room.code).emit('roomReset');
+        this.server.to(room.code).emit('roomState', { room: fullRoom });
+      }
+    } catch (error) {
+      console.error('Error resetting round:', error);
+    }
   }
 }

@@ -1,6 +1,6 @@
 import { useEffect, useCallback, useState } from 'react'
 import { getSocket } from './socket'
-import { useGameStore } from './useGameStore'
+import { useGameStore, type Player } from './useGameStore'
 
 export function useSocket() {
   const {
@@ -14,6 +14,7 @@ export function useSocket() {
     setConnected,
     addPlayer,
     removePlayer,
+    triggerClearLocalVote,
     reset,
   } = useGameStore()
 
@@ -28,6 +29,20 @@ export function useSocket() {
       setConnected(true)
       setError(null)
       setSocketId(socket.id || null)
+      
+      const state = useGameStore.getState()
+      if (state.currentRoom && state.currentPlayer) {
+        socket.emit('rejoinRoom', { 
+          roomCode: state.currentRoom.code, 
+          playerId: state.currentPlayer.id,
+          playerName: state.currentPlayer.name
+        }, (response) => {
+          if (response.success && response.room && response.player) {
+            setRoom(response.room)
+            setPlayer(response.player)
+          }
+        })
+      }
     })
 
     socket.on('disconnect', () => {
@@ -51,6 +66,14 @@ export function useSocket() {
     socket.on('roomState', (data) => {
       if (data.room.players.length > 0) {
         setRoom(data.room)
+        const state = useGameStore.getState()
+        const currentPlayer = state.currentPlayer
+        if (currentPlayer) {
+          const updatedPlayer = data.room.players.find((p: Player) => p.id === currentPlayer.id)
+          if (updatedPlayer) {
+            setPlayer(updatedPlayer)
+          }
+        }
       }
     })
 
@@ -78,6 +101,7 @@ export function useSocket() {
           isRevealed: false,
           players: room.players.map((p) => ({ ...p, hasVoted: false, vote: undefined })),
         })
+        triggerClearLocalVote()
       }
     })
 
@@ -154,8 +178,7 @@ export function useSocket() {
     const socket = getSocket()
     const { currentRoom, currentPlayer } = useGameStore.getState()
     if (!currentRoom || !currentPlayer?.isHost) return
-    socket.emit('startGame', { roomCode: currentRoom.code })
-    setRoom({ ...currentRoom, isStarted: true })
+    socket.emit('startGame', { roomCode: currentRoom.code, playerId: currentPlayer.id })
   }, [setRoom])
 
   const submitVote = useCallback((vote: string) => {
@@ -169,14 +192,14 @@ export function useSocket() {
     const socket = getSocket()
     const { currentRoom, currentPlayer } = useGameStore.getState()
     if (!currentRoom || !currentPlayer?.isHost) return
-    socket.emit('revealVotes', { roomCode: currentRoom.code })
+    socket.emit('revealVotes', { roomCode: currentRoom.code, playerId: currentPlayer.id })
   }, [])
 
   const resetRound = useCallback(() => {
     const socket = getSocket()
     const { currentRoom, currentPlayer } = useGameStore.getState()
-    if (!currentRoom || !currentPlayer?.isHost) return
-    socket.emit('resetRound', { roomCode: currentRoom.code })
+    if (!currentRoom || !currentPlayer) return
+    socket.emit('resetRound', { roomCode: currentRoom.code, playerId: currentPlayer.id })
   }, [])
 
   return {

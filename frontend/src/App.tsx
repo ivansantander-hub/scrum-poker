@@ -12,6 +12,7 @@ type View = 'rooms' | 'lobby' | 'game'
 
 function AppContent() {
   const [view, setView] = useState<View>('rooms')
+  const [prefilledRoomCode, setPrefilledRoomCode] = useState<string | null>(null)
   const { currentRoom, currentPlayer } = useGameStore()
   const {
     error,
@@ -26,6 +27,15 @@ function AppContent() {
     clearError,
     clearGameStart,
   } = useSocket()
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const roomCode = params.get('room')
+    if (roomCode) {
+      setPrefilledRoomCode(roomCode.toUpperCase())
+      setView('rooms')
+    }
+  }, [])
 
   useEffect(() => {
     if (gameShouldStart && view === 'lobby') {
@@ -47,15 +57,28 @@ function AppContent() {
   const handleCreateRoom = (_code: string, name: string, type: 'fibonacci' | 'hours') => {
     createRoom(name, type)
     setView('lobby')
+    clearPrefilledCode()
   }
 
   const handleJoinRoom = (code: string, name: string) => {
     joinRoom(code, name)
     setView('lobby')
+    clearPrefilledCode()
+  }
+
+  const clearPrefilledCode = () => {
+    const url = new URL(window.location.href)
+    url.searchParams.delete('room')
+    window.history.replaceState({}, '', url.toString())
+    setPrefilledRoomCode(null)
   }
 
   const handleStartGame = () => {
     startGame()
+    setView('game')
+  }
+
+  const handleJoinGame = () => {
     setView('game')
   }
 
@@ -82,7 +105,6 @@ function AppContent() {
 
   return (
     <>
-      <ConnectionStatus />
       <AnimatePresence mode="wait">
         {view === 'rooms' && (
           <motion.div
@@ -97,6 +119,7 @@ function AppContent() {
               onJoinRoom={handleJoinRoom}
               error={error}
               onClearError={clearError}
+              prefilledRoomCode={prefilledRoomCode}
             />
           </motion.div>
         )}
@@ -112,6 +135,7 @@ function AppContent() {
               room={currentRoom}
               player={currentPlayer}
               onStartGame={handleStartGame}
+              onJoinGame={handleJoinGame}
               onLeaveRoom={handleLeaveRoom}
             />
           </motion.div>
@@ -135,6 +159,7 @@ function AppContent() {
           </motion.div>
         )}
       </AnimatePresence>
+      <ConnectionStatus />
     </>
   )
 }

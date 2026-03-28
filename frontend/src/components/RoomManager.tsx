@@ -1,5 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { useGameStore } from '../hooks/useGameStore'
+import { t } from '../i18n'
 
 export type EstimationType = 'fibonacci' | 'hours'
 
@@ -8,6 +10,7 @@ interface RoomManagerProps {
   onJoinRoom: (roomCode: string, playerName: string) => void
   error: string | null
   onClearError: () => void
+  prefilledRoomCode?: string | null
 }
 
 const panelVariants = {
@@ -29,16 +32,24 @@ const buttonVariants = {
   })
 }
 
-export function RoomManager({ onCreateRoom, onJoinRoom, error, onClearError }: RoomManagerProps) {
-  const [mode, setMode] = useState<'choice' | 'create' | 'join'>('choice')
-  const [roomCode, setRoomCode] = useState('')
+export function RoomManager({ onCreateRoom, onJoinRoom, error, onClearError, prefilledRoomCode }: RoomManagerProps) {
+  const [mode, setMode] = useState<'choice' | 'create' | 'join'>(() => prefilledRoomCode ? 'join' : 'choice')
+  const [roomCode, setRoomCode] = useState(prefilledRoomCode || '')
   const [playerName, setPlayerName] = useState('')
   const [estimationType, setEstimationType] = useState<EstimationType>('fibonacci')
   const [localError, setLocalError] = useState('')
+  const { language, toggleLanguage } = useGameStore()
+
+  useEffect(() => {
+    if (prefilledRoomCode) {
+      setRoomCode(prefilledRoomCode)
+      setMode('join')
+    }
+  }, [prefilledRoomCode])
 
   const handleCreate = () => {
     if (!playerName.trim()) {
-      setLocalError('Enter your name')
+      setLocalError(t('enterYourName', language))
       return
     }
     const code = 'TMP'
@@ -47,11 +58,11 @@ export function RoomManager({ onCreateRoom, onJoinRoom, error, onClearError }: R
 
   const handleJoin = () => {
     if (!playerName.trim()) {
-      setLocalError('Enter your name')
+      setLocalError(t('enterYourName', language))
       return
     }
     if (roomCode.length !== 6) {
-      setLocalError('Room code must be 6 characters')
+      setLocalError(t('roomCodeMustBe6', language))
       return
     }
     onJoinRoom(roomCode.toUpperCase(), playerName.trim())
@@ -93,6 +104,15 @@ export function RoomManager({ onCreateRoom, onJoinRoom, error, onClearError }: R
         <span className="logo-text">SCRUM POKER</span>
       </motion.div>
 
+      <motion.button
+        className="lang-toggle"
+        onClick={toggleLanguage}
+        whileHover={{ scale: 1.02 }}
+        whileTap={{ scale: 0.98 }}
+      >
+        {language === 'en' ? 'ES' : 'EN'}
+      </motion.button>
+
       <div className="card-container">
         <AnimatePresence mode="wait">
           {mode === 'choice' && (
@@ -109,7 +129,7 @@ export function RoomManager({ onCreateRoom, onJoinRoom, error, onClearError }: R
                 animate={{ opacity: 1 }}
                 transition={{ delay: 0.1 }}
               >
-                Ready to play?
+                {t('readyToPlay', language)}
               </motion.h2>
               <div className="choice-buttons">
                 <motion.button 
@@ -127,7 +147,7 @@ export function RoomManager({ onCreateRoom, onJoinRoom, error, onClearError }: R
                     <line x1="12" y1="8" x2="12" y2="16"/>
                     <line x1="8" y1="12" x2="16" y2="12"/>
                   </svg>
-                  CREATE ROOM
+                  {t('createRoom', language)}
                 </motion.button>
                 <motion.button 
                   className="btn btn-secondary" 
@@ -144,7 +164,7 @@ export function RoomManager({ onCreateRoom, onJoinRoom, error, onClearError }: R
                     <polyline points="10 17 15 12 10 7"/>
                     <line x1="15" y1="12" x2="3" y2="12"/>
                   </svg>
-                  JOIN ROOM
+                  {t('joinRoom', language)}
                 </motion.button>
               </div>
             </motion.div>
@@ -166,13 +186,13 @@ export function RoomManager({ onCreateRoom, onJoinRoom, error, onClearError }: R
                 animate={{ opacity: 1, x: 0 }}
                 whileHover={{ x: -4 }}
               >
-                ← Back
+                {t('back', language)}
               </motion.button>
               <motion.h2
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
               >
-                Create Room
+                {t('createRoomTitle', language)}
               </motion.h2>
               <motion.div 
                 className="form-group"
@@ -180,12 +200,12 @@ export function RoomManager({ onCreateRoom, onJoinRoom, error, onClearError }: R
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.1 }}
               >
-                <label>Your Name</label>
+                <label>{t('yourName', language)}</label>
                 <input
                   type="text"
                   value={playerName}
                   onChange={(e) => { setPlayerName(e.target.value); setLocalError(''); onClearError(); }}
-                  placeholder="Enter your name"
+                  placeholder={t('enterYourName', language)}
                   maxLength={20}
                   autoFocus
                 />
@@ -196,7 +216,7 @@ export function RoomManager({ onCreateRoom, onJoinRoom, error, onClearError }: R
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.2 }}
               >
-                <label>Estimation Type</label>
+                <label>{t('estimationType', language)}</label>
                 <div className="estimation-toggle">
                   <motion.button
                     type="button"
@@ -206,7 +226,7 @@ export function RoomManager({ onCreateRoom, onJoinRoom, error, onClearError }: R
                     whileTap={{ scale: 0.98 }}
                   >
                     <span className="toggle-icon">🌰</span>
-                    Fibonacci
+                    {t('fibonacci', language)}
                   </motion.button>
                   <motion.button
                     type="button"
@@ -216,7 +236,7 @@ export function RoomManager({ onCreateRoom, onJoinRoom, error, onClearError }: R
                     whileTap={{ scale: 0.98 }}
                   >
                     <span className="toggle-icon">⏱</span>
-                    Hours
+                    {t('hours', language)}
                   </motion.button>
                 </div>
               </motion.div>
@@ -241,7 +261,7 @@ export function RoomManager({ onCreateRoom, onJoinRoom, error, onClearError }: R
                 whileHover={{ scale: 1.02, boxShadow: '0 8px 30px var(--accent-glow)' }}
                 whileTap={{ scale: 0.98 }}
               >
-                CREATE
+                {t('create', language)}
               </motion.button>
             </motion.div>
           )}
@@ -262,13 +282,13 @@ export function RoomManager({ onCreateRoom, onJoinRoom, error, onClearError }: R
                 animate={{ opacity: 1, x: 0 }}
                 whileHover={{ x: -4 }}
               >
-                ← Back
+                {t('back', language)}
               </motion.button>
               <motion.h2
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
               >
-                Join Room
+                {t('joinRoomTitle', language)}
               </motion.h2>
               <motion.div 
                 className="form-group"
@@ -276,12 +296,12 @@ export function RoomManager({ onCreateRoom, onJoinRoom, error, onClearError }: R
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.1 }}
               >
-                <label>Room Code</label>
+                <label>{t('roomCode', language)}</label>
                 <input
                   type="text"
                   value={roomCode}
                   onChange={(e) => { setRoomCode(e.target.value.toUpperCase().slice(0, 6)); setLocalError(''); onClearError(); }}
-                  placeholder="XXXXXX"
+                  placeholder={t('enterRoomCode', language)}
                   maxLength={6}
                   className="code-input"
                   autoFocus
@@ -293,12 +313,12 @@ export function RoomManager({ onCreateRoom, onJoinRoom, error, onClearError }: R
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.2 }}
               >
-                <label>Your Name</label>
+                <label>{t('yourName', language)}</label>
                 <input
                   type="text"
                   value={playerName}
                   onChange={(e) => { setPlayerName(e.target.value); setLocalError(''); onClearError(); }}
-                  placeholder="Enter your name"
+                  placeholder={t('enterYourName', language)}
                   maxLength={20}
                 />
               </motion.div>
@@ -323,7 +343,7 @@ export function RoomManager({ onCreateRoom, onJoinRoom, error, onClearError }: R
                 whileHover={{ scale: 1.02, boxShadow: '0 8px 30px var(--accent-glow)' }}
                 whileTap={{ scale: 0.98 }}
               >
-                JOIN
+                {t('join', language)}
               </motion.button>
             </motion.div>
           )}
@@ -336,7 +356,7 @@ export function RoomManager({ onCreateRoom, onJoinRoom, error, onClearError }: R
         animate={{ opacity: 1 }}
         transition={{ delay: 0.5 }}
       >
-        <p>Planning poker for agile teams</p>
+        <p>{t('planningPoker', language)}</p>
       </motion.footer>
     </div>
   )
