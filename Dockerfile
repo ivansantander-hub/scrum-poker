@@ -25,9 +25,10 @@ RUN pnpm build:frontend
 # Build backend
 RUN pnpm build:backend
 
-# Copy frontend dist to backend public folder for serving
+# Copy frontend dist and public assets to backend public folder for serving
 RUN mkdir -p /app/backend/dist/public && \
-    cp -r /app/frontend/dist/* /app/backend/dist/public/
+    cp -r /app/frontend/dist/* /app/backend/dist/public/ && \
+    cp -r /app/frontend/public/* /app/backend/dist/public/
 
 # Production image
 FROM node:20-alpine
