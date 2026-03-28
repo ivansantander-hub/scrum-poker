@@ -4,13 +4,14 @@ import { RoomManager } from './components/RoomManager'
 import { Lobby } from './components/Lobby'
 import { GameBoard } from './components/GameBoard'
 import { ConnectionStatus } from './components/ConnectionStatus'
+import { RoomNotFound } from './components/RoomNotFound'
 import { useSocket } from './hooks/useSocket'
 import { useGameStore } from './hooks/useGameStore'
 import './App.css'
 
-type View = 'rooms' | 'lobby' | 'game'
+type View = 'rooms' | 'lobby' | 'game' | 'not-found'
 
-const TITLES = {
+const TITLES: Record<string, { en: string; es: string }> = {
   rooms: {
     en: 'Scrum Poker - Free Planning Poker for Agile Teams',
     es: 'Scrum Poker - Poker de Planificación Gratuito para Equipos Ágiles'
@@ -22,12 +23,17 @@ const TITLES = {
   game: {
     en: 'Voting in Progress - Scrum Poker',
     es: 'Votación en Progreso - Scrum Poker'
+  },
+  'not-found': {
+    en: 'Room Not Found - Scrum Poker',
+    es: 'Sala No Encontrada - Scrum Poker'
   }
 }
 
 function AppContent() {
   const [view, setView] = useState<View>('rooms')
   const [prefilledRoomCode, setPrefilledRoomCode] = useState<string | null>(null)
+  const [notFoundRoomCode, setNotFoundRoomCode] = useState<string | null>(null)
   const { currentRoom, currentPlayer, language } = useGameStore()
   const {
     error,
@@ -42,6 +48,8 @@ function AppContent() {
     clearError,
     clearGameStart,
   } = useSocket()
+  
+  const { reset } = useGameStore()
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
@@ -51,6 +59,23 @@ function AppContent() {
       setView('rooms')
     }
   }, [])
+
+  useEffect(() => {
+    if (error && (error.toLowerCase().includes('not found') || error.toLowerCase().includes('no existe') || error.toLowerCase().includes('does not exist'))) {
+      setNotFoundRoomCode(prefilledRoomCode)
+      setView('not-found')
+    }
+  }, [error, prefilledRoomCode])
+
+  useEffect(() => {
+    if (currentRoom && currentPlayer && view !== 'not-found') {
+      if (currentRoom.isStarted) {
+        setView('game')
+      } else {
+        setView('lobby')
+      }
+    }
+  }, [currentRoom, currentPlayer])
 
   useEffect(() => {
     if (gameShouldStart && view === 'lobby') {
@@ -71,12 +96,12 @@ function AppContent() {
 
   useEffect(() => {
     const lang = language as 'en' | 'es'
-    document.title = TITLES[view][lang]
+    document.title = (TITLES as any)[view]?.[lang] || TITLES.rooms[lang]
     document.documentElement.lang = lang
     
     const metaDesc = document.querySelector('meta[name="description"]')
     if (metaDesc) {
-      const descriptions = {
+      const descriptions: Record<string, { en: string; es: string }> = {
         rooms: {
           en: 'Free real-time planning poker app for agile teams. Vote on story points with Fibonacci or hours estimation. No sign-up required.',
           es: 'App gratuita de poker de planificación en tiempo real para equipos ágiles. Vota story points con Fibonacci o horas. Sin registro.'
@@ -90,7 +115,7 @@ function AppContent() {
           es: `Sala ${currentRoom?.code || ''} - Vota los story points`
         }
       }
-      metaDesc.setAttribute('content', descriptions[view][lang])
+      metaDesc.setAttribute('content', (descriptions[view]?.[lang]) || descriptions.rooms[lang])
     }
   }, [view, language, currentRoom])
 
@@ -102,7 +127,6 @@ function AppContent() {
 
   const handleJoinRoom = (code: string, name: string, avatar: string) => {
     joinRoom(code, name, avatar)
-    setView('lobby')
     clearPrefilledCode()
   }
 
@@ -143,9 +167,34 @@ function AppContent() {
     resetRound()
   }
 
+  const handleGoHome = () => {
+    setNotFoundRoomCode(null)
+    setPrefilledRoomCode(null)
+    clearError()
+    reset()
+    setView('rooms')
+    const url = new URL(window.location.href)
+    url.searchParams.delete('room')
+    window.history.replaceState({}, '', url.toString())
+  }
+
   return (
     <>
       <AnimatePresence mode="wait">
+        {view === 'not-found' && (
+          <motion.div
+            key="not-found"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+          >
+            <RoomNotFound
+              roomCode={notFoundRoomCode || undefined}
+              onGoHome={handleGoHome}
+            />
+          </motion.div>
+        )}
         {view === 'rooms' && (
           <motion.div
             key="rooms"

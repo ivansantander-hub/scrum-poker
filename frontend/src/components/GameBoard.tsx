@@ -190,8 +190,19 @@ export function GameBoard({ room, player, onLeaveGame, onSubmitVote, onReveal, o
                 {p.name}
                 {p.id === player.id && <span className="you-indicator">({t('you', language)})</span>}
               </span>
-              <span className="vote-status-badge">
-                {p.hasVoted ? '✓' : '○'}
+              <span className={`vote-status-badge ${room.isRevealed && !p.hasVoted ? 'no-vote' : ''}`}>
+                {room.isRevealed && !p.hasVoted ? (
+                  <motion.span
+                    className="no-vote-x"
+                    initial={{ scale: 0, rotate: -180 }}
+                    animate={{ scale: 1, rotate: 0 }}
+                    transition={{ type: 'spring', stiffness: 300, damping: 15 }}
+                  >
+                    ✕
+                  </motion.span>
+                ) : (
+                  p.hasVoted ? '✓' : '○'
+                )}
               </span>
             </motion.div>
           ))}
@@ -253,7 +264,7 @@ export function GameBoard({ room, player, onLeaveGame, onSubmitVote, onReveal, o
                   <span>{t('voteSubmitted', language)}</span>
                 </motion.div>
               )}
-              {player.isHost && room.players.every(p => p.hasVoted) && (
+              {player.isHost && room.players.filter(p => p.hasVoted).length >= 2 && (
                 <motion.button 
                   className="btn btn-primary btn-large" 
                   onClick={onReveal}
@@ -262,7 +273,7 @@ export function GameBoard({ room, player, onLeaveGame, onSubmitVote, onReveal, o
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                 >
-                  {t('revealAll', language)}
+                  {t('revealAll', language)} ({room.players.filter(p => p.hasVoted).length}/{room.players.length})
                 </motion.button>
               )}
             </motion.div>
