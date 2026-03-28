@@ -19,11 +19,12 @@ interface ServerToClientEvents {
 interface ClientToServerEvents {
   createRoom: (data: { playerName: string; estimationType: 'fibonacci' | 'hours' }, callback?: (response: any) => void) => void
   joinRoom: (data: { roomCode: string; playerName: string }, callback?: (response: any) => void) => void
+  rejoinRoom: (data: { roomCode: string; playerId: string; playerName: string }, callback?: (response: any) => void) => void
   leaveRoom: (data: { roomCode: string; playerId: string }) => void
-  startGame: (data: { roomCode: string }) => void
+  startGame: (data: { roomCode: string; playerId: string }) => void
   submitVote: (data: { roomCode: string; playerId: string; vote: string }) => void
-  revealVotes: (data: { roomCode: string }) => void
-  resetRound: (data: { roomCode: string }) => void
+  revealVotes: (data: { roomCode: string; playerId: string }) => void
+  resetRound: (data: { roomCode: string; playerId: string }) => void
 }
 
 let socket: Socket<ServerToClientEvents, ClientToServerEvents> | null = null

@@ -1,5 +1,9 @@
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { type Room, type Player } from '../hooks/useGameStore'
+import { useGameStore } from '../hooks/useGameStore'
+import { t } from '../i18n'
+import { ConfirmDialog } from './ConfirmDialog'
 
 interface GameBoardProps {
   room: Room
@@ -61,19 +65,40 @@ function calculateAverage(votes: (string | undefined)[]): string {
 }
 
 export function GameBoard({ room, player, onLeaveGame, onSubmitVote, onReveal, onReset }: GameBoardProps) {
-  const selectedVote = player.vote
+  const { language, toggleLanguage, clearLocalVote, triggerClearLocalVote } = useGameStore()
+  const [showConfirm, setShowConfirm] = useState(false)
+  const [localSelectedVote, setLocalSelectedVote] = useState<string | undefined>(player.vote)
+  const selectedVote = localSelectedVote || player.vote
   const cards = room.estimationType === 'fibonacci' ? FIBONACCI_CARDS : HOURS_CARDS
   const average = calculateAverage(room.players.map(p => p.vote))
 
+  useEffect(() => {
+    if (clearLocalVote) {
+      setLocalSelectedVote(undefined)
+      triggerClearLocalVote()
+    }
+  }, [clearLocalVote])
+
+  useEffect(() => {
+    setLocalSelectedVote(player.vote)
+  }, [player.vote])
+
   const handleVote = (vote: string) => {
+    setLocalSelectedVote(vote)
     onSubmitVote(vote)
   }
 
   const handleLeave = () => {
+    setShowConfirm(true)
+  }
+
+  const handleConfirmExit = () => {
+    setShowConfirm(false)
     onLeaveGame()
   }
 
   return (
+    <>
     <div className="game-board">
       <header className="game-header">
         <motion.button 
@@ -87,25 +112,33 @@ export function GameBoard({ room, player, onLeaveGame, onSubmitVote, onReveal, o
             <polyline points="16 17 21 12 16 7"/>
             <line x1="21" y1="12" x2="9" y2="12"/>
           </svg>
-          Exit
+          {t('exit', language)}
         </motion.button>
         <div className="room-info">
-          <span className="room-label">ROOM</span>
+          <span className="room-label">{t('room', language)}</span>
           <span className="room-code">{room.code}</span>
         </div>
         <div className="mode-badge">
-          {room.estimationType === 'fibonacci' ? '🌰 Fibonacci' : '⏱ Hours'}
+          {room.estimationType === 'fibonacci' ? `🌰 ${t('fibonacci', language)}` : `⏱ ${t('hours', language)}`}
         </div>
-        {player.isHost && room.isRevealed && (
+        {room.isRevealed && (
           <motion.button 
             className="btn btn-small" 
             onClick={onReset}
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
           >
-            NEW ROUND
+            {t('newRound', language)}
           </motion.button>
         )}
+        <motion.button
+          className="lang-toggle-small"
+          onClick={toggleLanguage}
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
+        >
+          {language === 'en' ? 'ES' : 'EN'}
+        </motion.button>
       </header>
 
       <main className="game-main">
@@ -133,7 +166,7 @@ export function GameBoard({ room, player, onLeaveGame, onSubmitVote, onReveal, o
               </motion.span>
               <span className="vote-name">
                 {p.name}
-                {p.id === player.id && <span className="you-indicator">(You)</span>}
+                {p.id === player.id && <span className="you-indicator">({t('you', language)})</span>}
               </span>
               <span className="vote-status-badge">
                 {p.hasVoted ? '✓' : '○'}
@@ -152,7 +185,7 @@ export function GameBoard({ room, player, onLeaveGame, onSubmitVote, onReveal, o
               exit={{ opacity: 0, y: -20 }}
               transition={{ duration: 0.3 }}
             >
-              <p className="selection-hint">Select your estimation</p>
+              <p className="selection-hint">{t('selectEstimation', language)}</p>
               <motion.div 
                 className="cards"
                 variants={containerVariants}
@@ -181,9 +214,9 @@ export function GameBoard({ room, player, onLeaveGame, onSubmitVote, onReveal, o
                 transition={{ duration: 0.2 }}
               >
                 {selectedVote ? (
-                  <p>You chose <span className="highlight">{selectedVote}</span></p>
+                  <p>{t('youChose', language)} <span className="highlight">{selectedVote}</span></p>
                 ) : (
-                  <p>Tap a card to vote</p>
+                  <p>{t('tapCardToVote', language)}</p>
                 )}
               </motion.div>
               {selectedVote && (
@@ -195,7 +228,7 @@ export function GameBoard({ room, player, onLeaveGame, onSubmitVote, onReveal, o
                   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--success)" strokeWidth="2">
                     <polyline points="20 6 9 17 4 12"/>
                   </svg>
-                  <span>Vote submitted!</span>
+                  <span>{t('voteSubmitted', language)}</span>
                 </motion.div>
               )}
               {player.isHost && room.players.every(p => p.hasVoted) && (
@@ -207,7 +240,7 @@ export function GameBoard({ room, player, onLeaveGame, onSubmitVote, onReveal, o
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                 >
-                  REVEAL ALL
+                  {t('revealAll', language)}
                 </motion.button>
               )}
             </motion.div>
@@ -225,10 +258,10 @@ export function GameBoard({ room, player, onLeaveGame, onSubmitVote, onReveal, o
                 initial={{ opacity: 0, y: -20 }}
                 animate={{ opacity: 1, y: 0 }}
               >
-                Results
+                {t('results', language)}
               </motion.h2>
               <div className="average-card">
-                <span className="average-label">Average</span>
+                <span className="average-label">{t('average', language)}</span>
                 <span className="average-value">{average}</span>
               </div>
               <div className="votes-reveal-grid">
@@ -252,10 +285,19 @@ export function GameBoard({ room, player, onLeaveGame, onSubmitVote, onReveal, o
             animate={{ scale: 1, color: 'var(--text-muted)' }}
             transition={{ duration: 0.3 }}
           >
-            {room.players.filter(p => p.hasVoted).length} / {room.players.length} voted
+            {room.players.filter(p => p.hasVoted).length} / {room.players.length} {t('voted', language)}
           </motion.span>
         </div>
       </footer>
     </div>
+
+    <ConfirmDialog
+      isOpen={showConfirm}
+      title={t('exit', language)}
+      message={t('confirmExit', language)}
+      onConfirm={handleConfirmExit}
+      onCancel={() => setShowConfirm(false)}
+    />
+    </>
   )
 }

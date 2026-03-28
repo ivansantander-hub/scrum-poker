@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import type { Language } from '../i18n'
 
 export interface Player {
   id: string
@@ -24,6 +25,8 @@ interface GameState {
   currentPlayer: Player | null
   socketId: string | null
   isConnected: boolean
+  language: Language
+  clearLocalVote: boolean
   
   setRoom: (room: Room | null) => void
   setPlayer: (player: Player | null) => void
@@ -33,6 +36,8 @@ interface GameState {
   addPlayer: (player: Player) => void
   removePlayer: (playerId: string) => void
   updateRoom: (room: Room) => void
+  toggleLanguage: () => void
+  triggerClearLocalVote: () => void
   reset: () => void
 }
 
@@ -43,6 +48,8 @@ export const useGameStore = create<GameState>()(
       currentPlayer: null,
       socketId: null,
       isConnected: false,
+      language: 'en',
+      clearLocalVote: false,
 
       setRoom: (room) => set({ currentRoom: room }),
       
@@ -91,7 +98,13 @@ export const useGameStore = create<GameState>()(
       
       updateRoom: (room) => set({ currentRoom: room }),
       
-      reset: () => set({ currentRoom: null, currentPlayer: null, socketId: null, isConnected: false }),
+      toggleLanguage: () => set((state) => ({ 
+        language: state.language === 'en' ? 'es' : 'en' 
+      })),
+      
+      triggerClearLocalVote: () => set({ clearLocalVote: true }),
+      
+      reset: () => set({ currentRoom: null, currentPlayer: null, socketId: null, isConnected: false, clearLocalVote: false }),
     }),
     {
       name: 'scrum-poker-storage',
@@ -99,6 +112,7 @@ export const useGameStore = create<GameState>()(
         currentRoom: state.currentRoom,
         currentPlayer: state.currentPlayer,
         socketId: state.socketId,
+        language: state.language,
       }),
     }
   )
