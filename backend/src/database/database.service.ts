@@ -58,11 +58,38 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       this.db.run(`CREATE INDEX IF NOT EXISTS idx_rooms_code ON rooms(code)`);
       this.db.run(`CREATE INDEX IF NOT EXISTS idx_players_room ON players(room_id)`);
 
+      this.db.run(`ALTER TABLE rooms ADD COLUMN round_count INTEGER DEFAULT 0`, (err: any) => {
+        if (err && !err.message?.includes('duplicate column')) {
+          console.log('Round count column check:', err.message);
+        }
+      });
+
       this.db.run(`ALTER TABLE players ADD COLUMN avatar TEXT DEFAULT 'vincent'`, (err: any) => {
         if (err && !err.message?.includes('duplicate column')) {
           console.log('Avatar column check:', err.message);
         }
       });
+
+      this.db.run(`
+        CREATE TABLE IF NOT EXISTS rounds (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          room_id TEXT NOT NULL,
+          round_number INTEGER NOT NULL,
+          votes TEXT NOT NULL,
+          average TEXT,
+          std_dev TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (room_id) REFERENCES rooms(id)
+        )
+      `);
+
+      this.db.run(`ALTER TABLE rounds ADD COLUMN std_dev TEXT`, (err: any) => {
+        if (err && !err.message?.includes('duplicate column')) {
+          console.log('StdDev column check:', err.message);
+        }
+      });
+
+      this.db.run(`CREATE INDEX IF NOT EXISTS idx_rounds_room ON rounds(room_id)`);
 
       console.log('Database tables initialized');
     });
@@ -70,5 +97,93 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
 
   getDatabase(): sqlite3.Database {
     return this.db;
+  }
+
+  saveRound(roomId: string, roundNumber: number, votes: any, average: string, stdDev?: string): Promise<number> {
+    return new Promise((resolve, reject) => {
+      this.db.run(
+        `INSERT INTO rounds (room_id, round_number, votes, average, std_dev) VALUES (?, ?, ?, ?, ?)`,
+        [roomId, roundNumber, JSON.stringify(votes), average, stdDev || null],
+        function(err) {
+          if (err) reject(err);
+          else resolve(this.lastID);
+        }
+      );
+    });
+  }
+
+  getRoundHistory(roomId: string): Promise<any[]> {
+    return new Promise((resolve, reject) => {
+      this.db.all(
+        `SELECT * FROM rounds WHERE room_id = ? ORDER BY round_number DESC`,
+        [roomId],
+        (err, rows) => {
+          if (err) reject(err);
+          else resolve(rows.map((row: any) => ({
+            id: row.id,
+            roundNumber: row.round_number,
+            votes: JSON.parse(row.votes),
+            average: row.average,
+            stdDev: row.std_dev,
+            createdAt: row.created_at
+          })));
+        }
+      );
+    });
+  }
+
+  getSessionStats(roomId: string): Promise<any> {
+    return new Promise((resolve, reject) => {
+      this.db.all(
+        `SELECT * FROM rounds WHERE room_id = ? ORDER BY round_number ASC`,
+        [roomId],
+        (err, rows: any[]) => {
+          if (err) reject(err);
+          else {
+            const rounds = rows.map(row => ({
+              id: row.id,
+              roundNumber: row.round_number,
+              votes: JSON.parse(row.votes),
+              average: row.average,
+              stdDev: row.std_dev,
+              createdAt: row.created_at
+            }));
+            
+            const playerStats: Record<string, { name: string; votes: string[]; sum: number; count: number }> = {};
+            
+            rounds.forEach(round => {
+              round.votes.forEach((v: any) => {
+                if (!playerStats[v.playerId]) {
+                  playerStats[v.playerId] = { name: v.playerName, votes: [], sum: 0, count: 0 };
+                }
+                const numVal = v.vote?.endsWith('h') ? parseInt(v.vote.replace('h', '')) : parseInt(v.vote);
+                if (!isNaN(numVal)) {
+                  playerStats[v.playerId].sum += numVal;
+                  playerStats[v.playerId].count++;
+                }
+                playerStats[v.playerId].votes.push(v.vote || '-');
+              });
+            });
+
+            const overallAvg = rounds.length > 0
+              ? (rounds.reduce((sum, r) => sum + parseFloat(r.average || '0'), 0) / rounds.length).toFixed(1)
+              : '0';
+
+            resolve({
+              totalRounds: rounds.length,
+              overallAverage: overallAvg,
+              rounds,
+              playerStats: Object.entries(playerStats).map(([id, stats]) => ({
+                playerId: id,
+                playerName: stats.name,
+                totalVotes: stats.count,
+                average: stats.count > 0 ? (stats.sum / stats.count).toFixed(1) : '-',
+                votes: stats.votes
+              }))
+            });
+          }
+        }
+      );
+    });
   }
 }

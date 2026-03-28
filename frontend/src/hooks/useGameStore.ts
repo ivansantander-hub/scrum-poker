@@ -21,6 +21,21 @@ export interface Room {
   hostId: string
 }
 
+export interface RoundVote {
+  playerId: string
+  playerName: string
+  vote: string
+}
+
+export interface RoundHistory {
+  id: number
+  roundNumber: number
+  votes: RoundVote[]
+  average: string
+  stdDev?: string
+  createdAt: string
+}
+
 interface GameState {
   currentRoom: Room | null
   currentPlayer: Player | null
@@ -30,6 +45,10 @@ interface GameState {
   clearLocalVote: boolean
   savedName: string
   savedAvatar: string
+  sessionStats: any
+  showSessionReport: boolean
+  roundHistory: RoundHistory[]
+  wasKicked: boolean
   
   setRoom: (room: Room | null) => void
   setPlayer: (player: Player | null) => void
@@ -42,6 +61,11 @@ interface GameState {
   toggleLanguage: () => void
   triggerClearLocalVote: () => void
   saveUserPreferences: (name: string, avatar: string) => void
+  setSessionStats: (stats: any) => void
+  setShowSessionReport: (show: boolean) => void
+  closeSessionReport: () => void
+  setRoundHistory: (history: RoundHistory[]) => void
+  setWasKicked: (kicked: boolean) => void
   reset: () => void
 }
 
@@ -56,6 +80,10 @@ export const useGameStore = create<GameState>()(
       clearLocalVote: false,
       savedName: '',
       savedAvatar: '',
+      sessionStats: null,
+      showSessionReport: false,
+      roundHistory: [],
+      wasKicked: false,
 
       setRoom: (room) => set({ currentRoom: room }),
       
@@ -112,7 +140,17 @@ export const useGameStore = create<GameState>()(
       
       saveUserPreferences: (name, avatar) => set({ savedName: name, savedAvatar: avatar }),
       
-      reset: () => set({ currentRoom: null, currentPlayer: null, socketId: null, isConnected: false, clearLocalVote: false }),
+      setSessionStats: (stats) => set({ sessionStats: stats }),
+      
+      setShowSessionReport: (show) => set({ showSessionReport: show }),
+      
+      closeSessionReport: () => set({ showSessionReport: false }),
+      
+      setRoundHistory: (history) => set({ roundHistory: history }),
+      
+      setWasKicked: (kicked) => set({ wasKicked: kicked }),
+      
+      reset: () => set({ currentRoom: null, currentPlayer: null, socketId: null, isConnected: false, clearLocalVote: false, roundHistory: [], sessionStats: null, showSessionReport: false, wasKicked: false }),
     }),
     {
       name: 'scrum-poker-storage',

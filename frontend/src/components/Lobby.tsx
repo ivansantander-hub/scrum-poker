@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { type Room, type Player } from '../hooks/useGameStore'
 import { useGameStore } from '../hooks/useGameStore'
+import { useSocket } from '../hooks/useSocket'
 import { t } from '../i18n'
 import { ConfirmDialog } from './ConfirmDialog'
 import { AvatarPreviewModal } from './AvatarPreviewModal'
@@ -32,11 +33,25 @@ const playerVariants = {
 
 export function Lobby({ room, player, onStartGame, onJoinGame, onLeaveRoom }: LobbyProps) {
   const { language, toggleLanguage } = useGameStore()
+  const { kickPlayer } = useSocket()
   const [showConfirm, setShowConfirm] = useState(false)
   const [showShareMenu, setShowShareMenu] = useState(false)
   const [previewAvatar, setPreviewAvatar] = useState<string | null>(null)
+  const [showKickConfirm, setShowKickConfirm] = useState<{ show: boolean; playerId: string; playerName: string } | null>(null)
   const isHost = player.isHost
   const gameAlreadyStarted = room.isStarted
+
+  const handleKickClick = (targetPlayer: Player) => {
+    if (targetPlayer.id === player.id) return
+    setShowKickConfirm({ show: true, playerId: targetPlayer.id, playerName: targetPlayer.name })
+  }
+
+  const confirmKick = () => {
+    if (showKickConfirm) {
+      kickPlayer(showKickConfirm.playerId)
+      setShowKickConfirm(null)
+    }
+  }
 
   const getShareUrl = () => {
     const url = new URL(window.location.href)
@@ -158,16 +173,29 @@ export function Lobby({ room, player, onStartGame, onJoinGame, onLeaveRoom }: Lo
                       {p.isHost && <span className="host-badge">{t('host', language)}</span>}
                       {p.id === player.id && <span className="you-badge">{t('you', language)}</span>}
                     </span>
-                    <motion.span 
-                      className="vote-status"
-                      animate={{ 
-                        color: p.hasVoted ? 'var(--success)' : 'var(--text-muted)',
-                        scale: p.hasVoted ? [1, 1.2, 1] : 1
-                      }}
-                      transition={{ duration: 0.3 }}
-                    >
-                      {p.hasVoted ? '✓' : '○'}
-                    </motion.span>
+                    {isHost && p.id !== player.id && (
+                      <motion.button
+                        className="kick-btn"
+                        onClick={() => handleKickClick(p)}
+                        whileHover={{ scale: 1.1 }}
+                        whileTap={{ scale: 0.9 }}
+                        title={language === 'en' ? 'Remove player' : 'Expulsar jugador'}
+                      >
+                        ✕
+                      </motion.button>
+                    )}
+                    {!isHost && (
+                      <motion.span 
+                        className="vote-status"
+                        animate={{ 
+                          color: p.hasVoted ? 'var(--success)' : 'var(--text-muted)',
+                          scale: p.hasVoted ? [1, 1.2, 1] : 1
+                        }}
+                        transition={{ duration: 0.3 }}
+                      >
+                        {p.hasVoted ? '✓' : '○'}
+                      </motion.span>
+                    )}
                   </motion.li>
                 ))}
               </AnimatePresence>
@@ -255,6 +283,16 @@ export function Lobby({ room, player, onStartGame, onJoinGame, onLeaveRoom }: Lo
         message={t('confirmExit', language)}
         onConfirm={handleConfirmExit}
         onCancel={() => setShowConfirm(false)}
+      />
+
+      <ConfirmDialog
+        isOpen={showKickConfirm?.show || false}
+        title={language === 'en' ? 'Remove Player' : 'Expulsar Jugador'}
+        message={language === 'en' 
+          ? `Are you sure you want to remove ${showKickConfirm?.playerName || ''} from the room?`
+          : `¿Estás seguro de que quieres expulsar a ${showKickConfirm?.playerName || ''} de la sala?`}
+        onConfirm={confirmKick}
+        onCancel={() => setShowKickConfirm(null)}
       />
 
       {showShareMenu && (

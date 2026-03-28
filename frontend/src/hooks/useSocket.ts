@@ -1,6 +1,24 @@
 import { useEffect, useCallback, useState } from 'react'
 import { getSocket } from './socket'
 import { useGameStore, type Player } from './useGameStore'
+import { soundManager } from '../utils/sound'
+
+export interface RoundVote {
+  playerId: string
+  playerName: string
+  vote: string
+}
+
+export interface RoundHistory {
+  id: number
+  roundNumber: number
+  votes: RoundVote[]
+  average: string
+  createdAt: string
+}
+
+// Global flag to track if sessionStats listener is registered (singleton pattern)
+let sessionStatsListenerRegistered = false
 
 export function useSocket() {
   const {
@@ -8,6 +26,8 @@ export function useSocket() {
     currentPlayer,
     socketId,
     isConnected,
+    sessionStats,
+    showSessionReport,
     setRoom,
     setPlayer,
     setSocketId,
@@ -15,11 +35,38 @@ export function useSocket() {
     addPlayer,
     removePlayer,
     triggerClearLocalVote,
+    closeSessionReport,
     reset,
   } = useGameStore()
 
   const [error, setError] = useState<string | null>(null)
   const [gameShouldStart, setGameShouldStart] = useState(false)
+  
+  const roundHistory = useGameStore.getState().roundHistory
+
+  // Separate effect for sessionStats - only register once globally
+  useEffect(() => {
+    const socket = getSocket()
+    
+    // Only register listener if not already registered globally
+    if (!sessionStatsListenerRegistered) {
+      const handleSessionStats = (data: any) => {
+        console.log('Session stats received:', data)
+        // Use store actions directly to avoid closure issues
+        useGameStore.getState().setSessionStats(data.stats)
+        useGameStore.getState().setShowSessionReport(true)
+      }
+      
+      socket.on('sessionStats', handleSessionStats)
+      sessionStatsListenerRegistered = true
+      console.log('SessionStats listener registered globally')
+      
+      return () => {
+        // Only cleanup when the app unmounts completely
+        // We don't cleanup here to avoid removing listeners for other instances
+      }
+    }
+  }, [])
 
   useEffect(() => {
     const socket = getSocket()
@@ -79,10 +126,28 @@ export function useSocket() {
 
     socket.on('playerJoined', (data) => {
       addPlayer(data.player)
+      soundManager.playJoin()
     })
 
     socket.on('playerLeft', (data) => {
       removePlayer(data.playerId)
+      soundManager.playLeave()
+    })
+
+    socket.on('votesRevealed', () => {
+      soundManager.playReveal()
+    })
+
+    socket.on('playerKicked', (data: { playerId: string; reason: string }) => {
+      const state = useGameStore.getState()
+      if (state.currentPlayer?.id === data.playerId) {
+        soundManager.playKick()
+        useGameStore.getState().setWasKicked(true)
+        reset()
+      } else {
+        removePlayer(data.playerId)
+        soundManager.playLeave()
+      }
     })
 
     socket.on('voteUpdated', (data) => {
@@ -113,6 +178,10 @@ export function useSocket() {
       setGameShouldStart(true)
     })
 
+    socket.on('roundHistory', (data) => {
+      useGameStore.getState().setRoundHistory(data.history)
+    })
+
     socket.on('error', (data) => {
       setError(data.message)
     })
@@ -131,10 +200,12 @@ export function useSocket() {
       socket.off('roomState')
       socket.off('playerJoined')
       socket.off('playerLeft')
+      socket.off('playerKicked')
       socket.off('voteUpdated')
       socket.off('votesRevealed')
       socket.off('roomReset')
       socket.off('gameStarted')
+      socket.off('roundHistory')
       socket.off('error')
     }
   }, [setConnected, setSocketId, setPlayer, setRoom, addPlayer, removePlayer])
@@ -202,6 +273,66 @@ export function useSocket() {
     socket.emit('resetRound', { roomCode: currentRoom.code, playerId: currentPlayer.id })
   }, [])
 
+  const kickPlayer = useCallback((targetPlayerId: string) => {
+    const socket = getSocket()
+    const { currentRoom, currentPlayer } = useGameStore.getState()
+    if (!currentRoom || !currentPlayer?.isHost) return
+    socket.emit('kickPlayer', { 
+      roomCode: currentRoom.code, 
+      playerId: currentPlayer.id,
+      targetPlayerId 
+    })
+  }, [])
+
+  const getRoundHistory = useCallback((roomCode: string) => {
+    const socket = getSocket()
+    socket.emit('getRoundHistory', { roomCode })
+  }, [])
+
+  const getSessionStats = useCallback((roomCode: string) => {
+    const socket = getSocket()
+    if (!socket.connected) {
+      console.log('Socket not connected, attempting to reconnect...')
+      socket.connect()
+    }
+    console.log('Emitting getSessionStats for room:', roomCode)
+    socket.emit('getSessionStats', { roomCode })
+  }, [])
+
+  const exportToCSV = useCallback(() => {
+    const state = useGameStore.getState()
+    const currentRoom = state.currentRoom
+    const history = state.roundHistory
+    if (!history.length || !currentRoom) return
+
+    const headers = ['Round', 'Date', 'Player', 'Vote', 'Average']
+    const rows: string[] = []
+    
+    history.forEach((round: RoundHistory) => {
+      round.votes.forEach((vote: RoundVote) => {
+        rows.push([
+          round.roundNumber,
+          new Date(round.createdAt).toLocaleString(),
+          vote.playerName,
+          vote.vote,
+          round.average
+        ].join(','))
+      })
+    })
+
+    const csv = [headers.join(','), ...rows].join('\n')
+    
+    const blob = new Blob([csv], { type: 'text/csv' })
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `poker-session-${currentRoom.code}-${new Date().toISOString().split('T')[0]}.csv`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    window.URL.revokeObjectURL(url)
+  }, [])
+
   return {
     socketId,
     isConnected,
@@ -209,6 +340,9 @@ export function useSocket() {
     currentPlayer,
     error,
     gameShouldStart,
+    roundHistory,
+    sessionStats,
+    showSessionReport,
     createRoom,
     joinRoom,
     leaveRoom,
@@ -216,7 +350,12 @@ export function useSocket() {
     submitVote,
     revealVotes,
     resetRound,
+    kickPlayer,
+    getRoundHistory,
+    getSessionStats,
+    exportToCSV,
     clearError: () => setError(null),
     clearGameStart: () => setGameShouldStart(false),
+    closeSessionReport,
   }
 }
