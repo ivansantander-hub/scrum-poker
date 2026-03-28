@@ -1,98 +1,197 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# Scrum Poker - Backend
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+API REST y WebSocket para la aplicación Scrum Poker construida con NestJS + TypeScript + SQLite.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+## Tecnologías Principales
 
-## Description
+- **NestJS** - Framework Node.js progresivo
+- **TypeScript** - Tipado estático
+- **Socket.IO** - WebSockets para tiempo real
+- **SQLite** - Base de datos ligera
+- **@nestjs/throttler** - Rate limiting
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+## Características
 
-## Project setup
+### 🔄 WebSocket Gateway
 
-```bash
-$ pnpm install
+Events disponibles:
+- `createRoom` - Crear nueva sala
+- `joinRoom` - Unirse a sala existente
+- `startGame` - Iniciar juego (host)
+- `submitVote` - Enviar voto
+- `revealVotes` - Revelar votaciones (host)
+- `resetVotes` - Nueva ronda (host)
+- `kickPlayer` - Expulsar jugador (host)
+- `getRoundHistory` - Obtener historial
+- `getSessionStats` - Obtener estadísticas
+- `exportToCSV` - Exportar a CSV
+
+### 📝 Structured Logging
+
+Sistema de logs en formato JSON:
+```json
+{
+  "timestamp": "2026-03-28T12:00:00.000Z",
+  "level": "info",
+  "message": "Room created",
+  "context": "AppGateway",
+  "metadata": { "roomCode": "ABC123", "playerCount": 1 }
+}
 ```
 
-## Compile and run the project
+### 🛡️ Rate Limiting
 
-```bash
-# development
-$ pnpm run start
+Protección anti-spam:
+- **Votos**: 5 por 10 segundos por jugador
+- **Revelaciones**: 3 por 5 segundos por sala
+- **Expulsiones**: 3 por minuto por host
 
-# watch mode
-$ pnpm run start:dev
+### 💾 Base de Datos SQLite
 
-# production mode
-$ pnpm run start:prod
+Esquema:
+```sql
+rooms (code, created_at)
+players (id, room_code, name, avatar, is_host, socket_id)
+rounds (id, room_code, round_number, average, std_dev, created_at)
+votes (id, round_id, player_id, value, created_at)
 ```
 
-## Run tests
+### 📊 Cálculo de Estadísticas
 
-```bash
-# unit tests
-$ pnpm run test
+- **Promedio**: Media aritmética de votos válidos
+- **Desviación estándar**: σ = √(Σ(x - μ)² / n)
 
-# e2e tests
-$ pnpm run test:e2e
+### 📁 Estructura de Carpetas
 
-# test coverage
-$ pnpm run test:cov
+```
+src/
+├── websockets/
+│   └── app.gateway.ts      # WebSocket Gateway principal
+├── database/
+│   └── database.service.ts  # Servicio SQLite
+├── common/
+│   ├── structured-logger.service.ts  # Logger JSON
+│   └── vote-rate-limiter.service.ts  # Rate limiting
+├── app.module.ts           # Módulo raíz
+└── main.ts                 # Entry point
 ```
 
-## Deployment
-
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+## Scripts
 
 ```bash
-$ pnpm install -g @nestjs/mau
-$ mau deploy
+# Desarrollo
+pnpm start:dev             # Watch mode
+pnpm start               # Modo desarrollo
+
+# Build
+pnpm build                # Compilar para producción
+pnpm start:prod          # Ejecutar build de producción
+
+# Testing
+pnpm test                 # Unit tests
+pnpm test:e2e            # End-to-end tests
+pnpm test:cov            # Coverage
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+## Variables de Entorno
 
-## Resources
+Crear archivo `.env`:
 
-Check out a few resources that may come in handy when working with NestJS:
+```env
+PORT=3000                          # Puerto del servidor
+CORS_ORIGIN=http://localhost:5173  # Origen permitido (frontend)
+```
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+## API WebSocket
 
-## Support
+### Crear Sala
+```javascript
+socket.emit('createRoom', {
+  playerName: 'John',
+  estimationType: 'fibonacci', // o 'hours'
+  avatar: 'vincent.webp'
+})
+```
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+### Unirse a Sala
+```javascript
+socket.emit('joinRoom', {
+  roomCode: 'ABC123',
+  playerName: 'Jane',
+  avatar: 'vincent.webp'
+})
+```
 
-## Stay in touch
+### Votar
+```javascript
+socket.emit('submitVote', {
+  roomCode: 'ABC123',
+  playerId: 'player-uuid',
+  vote: '5'
+})
+```
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+### Eventos del Servidor
+```javascript
+socket.on('roomUpdated', (room) => {
+  // Datos actualizados de la sala
+})
 
-## License
+socket.on('playerKicked', () => {
+  // Jugador expulsado
+})
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+socket.on('votesRevealed', (votes) => {
+  // Votos revelados
+})
+```
+
+## Características Técnicas
+
+- **In-memory rate limiting** - Límites por jugador/sala sin Redis
+- **SQLite WAL mode** - Mejor performance concurrente
+- **Graceful shutdown** - Cierre ordenado de conexiones
+- **Error handling** - Captura y log de errores
+- **Room cleanup** - Limpieza automática de salas vacías
+
+## Deploy
+
+```bash
+# Build
+pnpm build
+
+# Producción
+pnpm start:prod
+```
+
+### Docker (opcional)
+
+```dockerfile
+FROM node:20-alpine
+WORKDIR /app
+COPY package*.json .
+RUN npm install
+COPY . .
+RUN npm run build
+EXPOSE 3000
+CMD ["npm", "run", "start:prod"]
+```
+
+## Monitoreo
+
+Logs en formato JSON para integración con:
+- ELK Stack
+- Datadog
+- Splunk
+- CloudWatch
+
+Ejemplo de log de rate limit:
+```json
+{
+  "timestamp": "2026-03-28T12:00:00.000Z",
+  "level": "warn",
+  "message": "Rate limit exceeded",
+  "context": "VoteRateLimiter",
+  "metadata": { "playerId": "xxx", "action": "vote", "window": 10 }
+}
+```

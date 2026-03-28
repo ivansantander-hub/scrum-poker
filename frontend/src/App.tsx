@@ -5,11 +5,12 @@ import { Lobby } from './components/Lobby'
 import { GameBoard } from './components/GameBoard'
 import { ConnectionStatus } from './components/ConnectionStatus'
 import { RoomNotFound } from './components/RoomNotFound'
+import { KickedOut } from './components/KickedOut'
 import { useSocket } from './hooks/useSocket'
 import { useGameStore } from './hooks/useGameStore'
 import './App.css'
 
-type View = 'rooms' | 'lobby' | 'game' | 'not-found'
+type View = 'rooms' | 'lobby' | 'game' | 'not-found' | 'kicked'
 
 const TITLES: Record<string, { en: string; es: string }> = {
   rooms: {
@@ -27,6 +28,10 @@ const TITLES: Record<string, { en: string; es: string }> = {
   'not-found': {
     en: 'Room Not Found - Scrum Poker',
     es: 'Sala No Encontrada - Scrum Poker'
+  },
+  kicked: {
+    en: 'Removed from Room - Scrum Poker',
+    es: 'Expulsado de la Sala - Scrum Poker'
   }
 }
 
@@ -34,7 +39,7 @@ function AppContent() {
   const [view, setView] = useState<View>('rooms')
   const [prefilledRoomCode, setPrefilledRoomCode] = useState<string | null>(null)
   const [notFoundRoomCode, setNotFoundRoomCode] = useState<string | null>(null)
-  const { currentRoom, currentPlayer, language } = useGameStore()
+  const { currentRoom, currentPlayer, language, wasKicked, setWasKicked } = useGameStore()
   const {
     error,
     gameShouldStart,
@@ -66,6 +71,13 @@ function AppContent() {
       setView('not-found')
     }
   }, [error, prefilledRoomCode])
+
+  useEffect(() => {
+    if (wasKicked) {
+      setView('kicked')
+      setWasKicked(false)
+    }
+  }, [wasKicked, setWasKicked])
 
   useEffect(() => {
     if (currentRoom && currentPlayer && view !== 'not-found') {
@@ -170,6 +182,7 @@ function AppContent() {
   const handleGoHome = () => {
     setNotFoundRoomCode(null)
     setPrefilledRoomCode(null)
+    setWasKicked(false)
     clearError()
     reset()
     setView('rooms')
@@ -181,6 +194,17 @@ function AppContent() {
   return (
     <>
       <AnimatePresence mode="wait">
+        {view === 'kicked' && (
+          <motion.div
+            key="kicked"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+          >
+            <KickedOut onGoHome={handleGoHome} />
+          </motion.div>
+        )}
         {view === 'not-found' && (
           <motion.div
             key="not-found"

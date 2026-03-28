@@ -7,6 +7,8 @@ export function ConnectionStatus() {
   const { isConnected } = useSocket()
   const { language } = useGameStore()
 
+  if (!import.meta.env.DEV) return null
+
   return (
     <motion.div 
       className="connection-status"

@@ -8,6 +8,7 @@ export interface RoomRow {
   is_revealed: number;
   is_started: number;
   host_id: string;
+  round_count: number;
   created_at: string;
 }
 
@@ -92,6 +93,20 @@ export class RoomRepository {
         if (err) reject(err);
         else resolve();
       });
+    });
+  }
+
+  incrementRoundCount(id: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const db = this.databaseService.getDatabase();
+      db.run(
+        `UPDATE rooms SET round_count = round_count + 1 WHERE id = ?`,
+        [id],
+        (err) => {
+          if (err) reject(err);
+          else resolve();
+        }
+      );
     });
   }
 }

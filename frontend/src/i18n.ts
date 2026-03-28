@@ -49,6 +49,12 @@ export const translations = {
     copyLink: 'Copy invite link',
     selectAvatar: 'Choose your avatar',
     refresh: 'Refresh',
+    history: 'History',
+    report: 'Report',
+    kickPlayer: 'Kick Player',
+    exportCSV: 'Export CSV',
+    stdDev: 'Std Dev',
+    shortcutsHint: '1-8: select card • Q: ? • C: ☕ • Space: reveal',
   },
   es: {
     online: 'En línea',
@@ -98,11 +104,17 @@ export const translations = {
     copyLink: 'Copiar enlace de invitación',
     selectAvatar: 'Elige tu avatar',
     refresh: 'Refrescar',
+    history: 'Historial',
+    report: 'Reporte',
+    kickPlayer: 'Expulsar Jugador',
+    exportCSV: 'Exportar CSV',
+    stdDev: 'Desv Estándar',
+    shortcutsHint: '1-8: seleccionar carta • Q: ? • C: ☕ • Espacio: revelar',
   },
 } as const
 
 export type TranslationKey = keyof typeof translations.en
 
 export function t(key: TranslationKey, lang: Language): string {
-  return translations[lang][key] || key
+  return (translations[lang] as Record<TranslationKey, string>)[key] || key
 }

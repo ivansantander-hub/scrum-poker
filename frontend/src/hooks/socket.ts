@@ -11,6 +11,7 @@ interface ServerToClientEvents {
   roomJoined: (data: { room: any; player: any }) => void
   playerJoined: (data: { player: any }) => void
   playerLeft: (data: { playerId: string }) => void
+  playerKicked: (data: { playerId: string; reason: string }) => void
   voteUpdated: (data: { playerId: string; vote: string }) => void
   votesRevealed: (data: { room: any }) => void
   roomReset: () => void
@@ -18,6 +19,8 @@ interface ServerToClientEvents {
   error: (data: { message: string }) => void
   roomState: (data: { room: any }) => void
   serverStatus: (data: { status: string; clients: number }) => void
+  roundHistory: (data: { history: any[] }) => void
+  sessionStats: (data: { stats: any; roomCode: string }) => void
 }
 
 interface ClientToServerEvents {
@@ -25,10 +28,13 @@ interface ClientToServerEvents {
   joinRoom: (data: { roomCode: string; playerName: string; avatar: string }, callback?: (response: any) => void) => void
   rejoinRoom: (data: { roomCode: string; playerId: string; playerName: string }, callback?: (response: any) => void) => void
   leaveRoom: (data: { roomCode: string; playerId: string }) => void
+  kickPlayer: (data: { roomCode: string; playerId: string; targetPlayerId: string }) => void
   startGame: (data: { roomCode: string; playerId: string }) => void
   submitVote: (data: { roomCode: string; playerId: string; vote: string }) => void
   revealVotes: (data: { roomCode: string; playerId: string }) => void
   resetRound: (data: { roomCode: string; playerId: string }) => void
+  getRoundHistory: (data: { roomCode: string }) => void
+  getSessionStats: (data: { roomCode: string }) => void
 }
 
 let socket: Socket<ServerToClientEvents, ClientToServerEvents> | null = null
