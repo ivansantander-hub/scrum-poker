@@ -45,6 +45,8 @@ export const translations = {
     confirm: 'Confirm',
     gameAlreadyStarted: 'The game has already started!',
     joinGame: 'JOIN GAME',
+    copyCode: 'Copy room code',
+    copyLink: 'Copy invite link',
   },
   es: {
     online: 'En línea',
@@ -90,6 +92,8 @@ export const translations = {
     confirm: 'Confirmar',
     gameAlreadyStarted: '¡El juego ya ha comenzado!',
     joinGame: 'UNIRSE AL JUEGO',
+    copyCode: 'Copiar código de sala',
+    copyLink: 'Copiar enlace de invitación',
   },
 } as const
 
