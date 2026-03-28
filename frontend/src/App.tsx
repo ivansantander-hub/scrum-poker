@@ -54,14 +54,14 @@ function AppContent() {
     }
   }, [])
 
-  const handleCreateRoom = (_code: string, name: string, type: 'fibonacci' | 'hours') => {
-    createRoom(name, type)
+  const handleCreateRoom = (_code: string, name: string, type: 'fibonacci' | 'hours', avatar: string) => {
+    createRoom(name, type, avatar)
     setView('lobby')
     clearPrefilledCode()
   }
 
-  const handleJoinRoom = (code: string, name: string) => {
-    joinRoom(code, name)
+  const handleJoinRoom = (code: string, name: string, avatar: string) => {
+    joinRoom(code, name, avatar)
     setView('lobby')
     clearPrefilledCode()
   }

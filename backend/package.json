@@ -6,8 +6,8 @@
   "private": true,
   "license": "MIT",
   "scripts": {
-    "clean": "rm -rf dist coverage",
-    "clean:db": "rm -rf data",
+    "clean": "rimraf dist coverage",
+    "clean:db": "rimraf data",
     "build": "nest build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
@@ -30,7 +30,7 @@
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "socket.io": "^4.8.3",
-    "sqlite3": "^6.0.1"
+    "sqlite3": "^5.1.7"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",

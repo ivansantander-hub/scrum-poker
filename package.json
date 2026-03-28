@@ -6,16 +6,20 @@
   "scripts": {
     "dev": "pnpm --parallel -r run dev",
     "dev:backend": "pnpm -F @scrum-poker/backend start:dev",
+    "rebuild:sqlite3": "pnpm -F @scrum-poker/backend rebuild sqlite3",
     "dev:frontend": "pnpm -F @scrum-poker/frontend dev",
     "build": "pnpm -r run build",
     "build:backend": "pnpm -F @scrum-poker/backend build",
     "build:frontend": "pnpm -F @scrum-poker/frontend build",
     "lint": "pnpm -r run lint",
     "test": "pnpm -r run test",
-    "clean": "pnpm -r run clean && rm -rf node_modules",
-    "clean:db": "pnpm -F @scrum-poker/backend clean:db"
+    "clean": "pnpm -r run clean && rimraf node_modules",
+    "clean:db": "pnpm -F @scrum-poker/backend clean:db",
+    "optimize:images": "node scripts/optimize-images.js"
   },
   "devDependencies": {
+    "rimraf": "^5.0.0",
+    "sharp": "^0.33.5",
     "typescript": "^5.7.3"
   },
   "engines": {

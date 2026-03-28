@@ -6,6 +6,7 @@ export interface PlayerRow {
   room_id: string;
   socket_id: string | null;
   name: string;
+  avatar: string;
   is_host: number;
   has_voted: number;
   vote: string | null;
@@ -16,12 +17,12 @@ export interface PlayerRow {
 export class PlayerRepository {
   constructor(private databaseService: DatabaseService) {}
 
-  create(id: string, roomId: string, name: string, isHost: boolean, socketId?: string): Promise<void> {
+  create(id: string, roomId: string, name: string, avatar: string, isHost: boolean, socketId?: string): Promise<void> {
     return new Promise((resolve, reject) => {
       const db = this.databaseService.getDatabase();
       db.run(
-        `INSERT INTO players (id, room_id, name, is_host, socket_id) VALUES (?, ?, ?, ?, ?)`,
-        [id, roomId, name, isHost ? 1 : 0, socketId || null],
+        `INSERT INTO players (id, room_id, name, avatar, is_host, socket_id) VALUES (?, ?, ?, ?, ?, ?)`,
+        [id, roomId, name, avatar, isHost ? 1 : 0, socketId || null],
         (err) => {
           if (err) reject(err);
           else resolve();
