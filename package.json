@@ -1,0 +1,24 @@
+{
+  "name": "scrum-poker",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Scrum Poker Monorepo",
+  "scripts": {
+    "dev": "pnpm --parallel -r run dev",
+    "dev:backend": "pnpm -F @scrum-poker/backend start:dev",
+    "dev:frontend": "pnpm -F @scrum-poker/frontend dev",
+    "build": "pnpm -r run build",
+    "build:backend": "pnpm -F @scrum-poker/backend build",
+    "build:frontend": "pnpm -F @scrum-poker/frontend build",
+    "lint": "pnpm -r run lint",
+    "test": "pnpm -r run test",
+    "clean": "pnpm -r run clean && rm -rf node_modules"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "pnpm": ">=8.0.0"
+  }
+}
