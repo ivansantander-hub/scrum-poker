@@ -33,7 +33,7 @@ const playerVariants = {
 
 export function Lobby({ room, player, onStartGame, onJoinGame, onLeaveRoom }: LobbyProps) {
   const { language, toggleLanguage } = useGameStore()
-  const { kickPlayer } = useSocket()
+  const { kickPlayer, error, clearError } = useSocket()
   const [showConfirm, setShowConfirm] = useState(false)
   const [showShareMenu, setShowShareMenu] = useState(false)
   const [previewAvatar, setPreviewAvatar] = useState<string | null>(null)
@@ -177,11 +177,15 @@ export function Lobby({ room, player, onStartGame, onJoinGame, onLeaveRoom }: Lo
                       <motion.button
                         className="kick-btn"
                         onClick={() => handleKickClick(p)}
-                        whileHover={{ scale: 1.1 }}
-                        whileTap={{ scale: 0.9 }}
-                        title={language === 'en' ? 'Remove player' : 'Expulsar jugador'}
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        title={t('kickPlayer', language)}
                       >
-                        ✕
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M1 4l5 5-5 5"/>
+                          <line x1="11" y1="9" x2="23" y2="9"/>
+                        </svg>
+                        {t('kickPlayer', language)}
                       </motion.button>
                     )}
                     {!isHost && (
@@ -277,6 +281,18 @@ export function Lobby({ room, player, onStartGame, onJoinGame, onLeaveRoom }: Lo
         </footer>
       </div>
 
+      {error && (
+        <motion.div
+          className="error-banner"
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -10 }}
+        >
+          <span>{error}</span>
+          <button className="error-close" onClick={clearError}>✕</button>
+        </motion.div>
+      )}
+
       <ConfirmDialog
         isOpen={showConfirm}
         title={t('exit', language)}
@@ -292,7 +308,7 @@ export function Lobby({ room, player, onStartGame, onJoinGame, onLeaveRoom }: Lo
           ? `Are you sure you want to remove ${showKickConfirm?.playerName || ''} from the room?`
           : `¿Estás seguro de que quieres expulsar a ${showKickConfirm?.playerName || ''} de la sala?`}
         onConfirm={confirmKick}
-        onCancel={() => setShowKickConfirm(null)}
+        onCancel={() => { setShowKickConfirm(null); clearError() }}
       />
 
       {showShareMenu && (
