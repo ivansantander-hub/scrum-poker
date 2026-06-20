@@ -55,6 +55,9 @@ export const translations = {
     exportCSV: 'Export CSV',
     stdDev: 'Std Dev',
     shortcutsHint: '1-8: select card • Q: ? • C: ☕ • Space: reveal',
+    or: 'or',
+    customHoursPlaceholder: 'Custom hours (e.g. 6h)',
+    customHoursSubmit: 'SET',
   },
   es: {
     online: 'En línea',
@@ -110,6 +113,9 @@ export const translations = {
     exportCSV: 'Exportar CSV',
     stdDev: 'Desv Estándar',
     shortcutsHint: '1-8: seleccionar carta • Q: ? • C: ☕ • Espacio: revelar',
+    or: 'o',
+    customHoursPlaceholder: 'Horas personalizadas (ej. 6h)',
+    customHoursSubmit: 'PONER',
   },
 } as const
 
