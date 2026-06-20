@@ -142,8 +142,8 @@ export function useSocket() {
       const state = useGameStore.getState()
       if (state.currentPlayer?.id === data.playerId) {
         soundManager.playKick()
-        useGameStore.getState().setWasKicked(true)
         reset()
+        useGameStore.getState().setWasKicked(true)
       } else {
         removePlayer(data.playerId)
         soundManager.playLeave()

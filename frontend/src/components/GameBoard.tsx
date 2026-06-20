@@ -99,8 +99,9 @@ function PlayerAvatar({ name, avatar, hasVoted, onDoubleClick }: { name: string;
 
 export function GameBoard({ room, player, onLeaveGame, onSubmitVote, onReveal, onReset }: GameBoardProps) {
   const { language, toggleLanguage, clearLocalVote, triggerClearLocalVote } = useGameStore()
-  const { getRoundHistory, getSessionStats, showSessionReport, closeSessionReport } = useSocket()
+  const { getRoundHistory, getSessionStats, showSessionReport, closeSessionReport, kickPlayer } = useSocket()
   const [showConfirm, setShowConfirm] = useState(false)
+  const [showKickConfirm, setShowKickConfirm] = useState<{ show: boolean; playerId: string; playerName: string } | null>(null)
   const [localSelectedVote, setLocalSelectedVote] = useState<string | undefined>(player.vote)
   const [previewAvatar, setPreviewAvatar] = useState<string | null>(null)
   const [showHistory, setShowHistory] = useState(false)
@@ -189,6 +190,18 @@ export function GameBoard({ room, player, onLeaveGame, onSubmitVote, onReveal, o
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [room, player, cards, onReveal, handleVote])
+
+  const handleKickClick = (targetPlayer: Player) => {
+    if (targetPlayer.id === player.id) return
+    setShowKickConfirm({ show: true, playerId: targetPlayer.id, playerName: targetPlayer.name })
+  }
+
+  const confirmKick = () => {
+    if (showKickConfirm) {
+      kickPlayer(showKickConfirm.playerId)
+      setShowKickConfirm(null)
+    }
+  }
 
   const handleLeave = () => {
     setShowConfirm(true)
@@ -288,6 +301,20 @@ export function GameBoard({ room, player, onLeaveGame, onSubmitVote, onReveal, o
                   p.hasVoted ? '✓' : '○'
                 )}
               </span>
+              {player.isHost && p.id !== player.id && (
+                <motion.button
+                  className="kick-btn"
+                  onClick={() => handleKickClick(p)}
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  title={t('kickPlayer', language)}
+                >
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M1 4l5 5-5 5"/>
+                    <line x1="11" y1="9" x2="23" y2="9"/>
+                  </svg>
+                </motion.button>
+              )}
             </motion.div>
           ))}
         </motion.div>
@@ -440,6 +467,16 @@ export function GameBoard({ room, player, onLeaveGame, onSubmitVote, onReveal, o
       message={t('confirmExit', language)}
       onConfirm={handleConfirmExit}
       onCancel={() => setShowConfirm(false)}
+    />
+
+    <ConfirmDialog
+      isOpen={showKickConfirm?.show || false}
+      title={t('kickPlayer', language)}
+      message={language === 'en'
+        ? `Are you sure you want to remove ${showKickConfirm?.playerName || ''} from the room?`
+        : `¿Estás seguro de que quieres expulsar a ${showKickConfirm?.playerName || ''} de la sala?`}
+      onConfirm={confirmKick}
+      onCancel={() => setShowKickConfirm(null)}
     />
     <AvatarPreviewModal avatar={previewAvatar} onClose={() => setPreviewAvatar(null)} />
     <RoundHistoryPanel isOpen={showHistory} onClose={() => setShowHistory(false)} />
