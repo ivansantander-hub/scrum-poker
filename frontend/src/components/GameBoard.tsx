@@ -102,6 +102,7 @@ export function GameBoard({ room, player, onLeaveGame, onSubmitVote, onReveal, o
   const { getRoundHistory, getSessionStats, showSessionReport, closeSessionReport, kickPlayer } = useSocket()
   const [showConfirm, setShowConfirm] = useState(false)
   const [showKickConfirm, setShowKickConfirm] = useState<{ show: boolean; playerId: string; playerName: string } | null>(null)
+  const [customHourInput, setCustomHourInput] = useState('')
   const [localSelectedVote, setLocalSelectedVote] = useState<string | undefined>(player.vote)
   const [previewAvatar, setPreviewAvatar] = useState<string | null>(null)
   const [showHistory, setShowHistory] = useState(false)
@@ -134,12 +135,25 @@ export function GameBoard({ room, player, onLeaveGame, onSubmitVote, onReveal, o
   const handleVote = (vote: string) => {
     setLocalSelectedVote(vote)
     onSubmitVote(vote)
+    setCustomHourInput('')
     soundManager.playVote()
+  }
+
+  const handleCustomHourSubmit = () => {
+    const trimmed = customHourInput.trim()
+    if (!trimmed) return
+    const normalized = trimmed.endsWith('h') ? trimmed : `${trimmed}h`
+    if (/^\d+(\.\d+)?h$/.test(normalized)) {
+      handleVote(normalized)
+    }
   }
 
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Skip shortcuts when custom input is focused
+      if (document.activeElement?.tagName === 'INPUT') return
+
       // Space to reveal (host only, when at least 2 votes)
       if (e.code === 'Space' && player.isHost && !room.isRevealed && room.players.filter(p => p.hasVoted).length >= 2) {
         e.preventDefault()
@@ -350,6 +364,41 @@ export function GameBoard({ room, player, onLeaveGame, onSubmitVote, onReveal, o
                   </motion.button>
                 ))}
               </motion.div>
+              {room.estimationType === 'hours' && (
+                <motion.div
+                  className="custom-hours-input"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.2, duration: 0.3 }}
+                >
+                  <span className="custom-hours-divider">{t('or', language)}</span>
+                  <div className="custom-hours-field">
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      className="hours-input"
+                      placeholder={t('customHoursPlaceholder', language)}
+                      value={customHourInput}
+                      onChange={(e) => setCustomHourInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          handleCustomHourSubmit()
+                        }
+                      }}
+                      disabled={!!selectedVote}
+                    />
+                    <motion.button
+                      className="btn btn-small hours-submit"
+                      onClick={handleCustomHourSubmit}
+                      disabled={!!selectedVote || !customHourInput.trim()}
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                    >
+                      {t('customHoursSubmit', language)}
+                    </motion.button>
+                  </div>
+                </motion.div>
+              )}
               <motion.div 
                 className="selection-status"
                 key={selectedVote || 'none'}
