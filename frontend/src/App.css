@@ -1652,3 +1652,127 @@ body {
 .card-selection:hover .shortcuts-hint {
   opacity: 1;
 }
+
+/* ==================== ROUND METADATA INPUTS ==================== */
+.round-metadata {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.round-meta-input {
+  width: 240px;
+  padding: 0.5rem 0.75rem;
+  background: var(--surface);
+  border: 2px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 0.75rem;
+  text-align: center;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.round-meta-input:focus {
+  border-color: var(--accent);
+}
+
+.round-meta-input::placeholder {
+  color: var(--text-muted);
+  font-size: 0.65rem;
+}
+
+.final-decision-section {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.final-decision-field {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  justify-content: center;
+}
+
+/* ==================== HISTORY META ==================== */
+.round-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0;
+  flex-wrap: wrap;
+}
+
+.round-meta-title {
+  font-size: 0.7rem;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.round-meta-link {
+  font-size: 0.65rem;
+  color: var(--accent);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 200px;
+}
+
+.round-meta-link:hover {
+  text-decoration: underline;
+}
+
+.round-decision {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem 0;
+  font-size: 0.7rem;
+  color: var(--success);
+}
+
+.decision-label {
+  color: var(--text-muted);
+  font-size: 0.65rem;
+}
+
+/* ==================== SESSION REPORT ROUND INFO ==================== */
+.report-round-info {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  flex-wrap: wrap;
+}
+
+.report-round-title {
+  font-size: 0.7rem;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.report-round-link {
+  font-size: 0.75rem;
+  text-decoration: none;
+}
+
+.report-round-stats {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.report-round-decision {
+  font-size: 0.7rem;
+  color: var(--success);
+  font-weight: 600;
+  background: rgba(34, 197, 94, 0.1);
+  padding: 0.125rem 0.375rem;
+  border-radius: 3px;
+}

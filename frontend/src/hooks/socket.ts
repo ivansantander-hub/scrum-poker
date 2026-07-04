@@ -20,6 +20,7 @@ interface ServerToClientEvents {
   roomState: (data: { room: any }) => void
   serverStatus: (data: { status: string; clients: number }) => void
   roundHistory: (data: { history: any[] }) => void
+  lastSavedRoundId: (data: { roundId: number }) => void
   sessionStats: (data: { stats: any; roomCode: string }) => void
 }
 
@@ -31,7 +32,8 @@ interface ClientToServerEvents {
   kickPlayer: (data: { roomCode: string; playerId: string; targetPlayerId: string }) => void
   startGame: (data: { roomCode: string; playerId: string }) => void
   submitVote: (data: { roomCode: string; playerId: string; vote: string }) => void
-  revealVotes: (data: { roomCode: string; playerId: string }) => void
+  revealVotes: (data: { roomCode: string; playerId: string; title?: string; link?: string }) => void
+  updateRoundDecision: (data: { roomCode: string; playerId: string; roundId: number; finalDecision: string }) => void
   resetRound: (data: { roomCode: string; playerId: string }) => void
   getRoundHistory: (data: { roomCode: string }) => void
   getSessionStats: (data: { roomCode: string }) => void

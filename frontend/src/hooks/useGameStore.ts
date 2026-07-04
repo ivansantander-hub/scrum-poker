@@ -33,6 +33,9 @@ export interface RoundHistory {
   votes: RoundVote[]
   average: string
   stdDev?: string
+  title?: string
+  link?: string
+  finalDecision?: string
   createdAt: string
 }
 

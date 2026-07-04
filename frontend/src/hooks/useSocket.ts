@@ -14,6 +14,10 @@ export interface RoundHistory {
   roundNumber: number
   votes: RoundVote[]
   average: string
+  stdDev?: string
+  title?: string
+  link?: string
+  finalDecision?: string
   createdAt: string
 }
 
@@ -41,6 +45,7 @@ export function useSocket() {
 
   const [error, setError] = useState<string | null>(null)
   const [gameShouldStart, setGameShouldStart] = useState(false)
+  const [currentRoundId, setCurrentRoundId] = useState<number | null>(null)
   
   const roundHistory = useGameStore.getState().roundHistory
 
@@ -182,6 +187,10 @@ export function useSocket() {
       useGameStore.getState().setRoundHistory(data.history)
     })
 
+    socket.on('lastSavedRoundId', (data) => {
+      setCurrentRoundId(data.roundId)
+    })
+
     socket.on('error', (data) => {
       setError(data.message)
     })
@@ -259,11 +268,18 @@ export function useSocket() {
     socket.emit('submitVote', { roomCode: currentRoom.code, playerId: currentPlayer.id, vote })
   }, [])
 
-  const revealVotes = useCallback(() => {
+  const revealVotes = useCallback((title?: string, link?: string) => {
     const socket = getSocket()
     const { currentRoom, currentPlayer } = useGameStore.getState()
     if (!currentRoom || !currentPlayer?.isHost) return
-    socket.emit('revealVotes', { roomCode: currentRoom.code, playerId: currentPlayer.id })
+    socket.emit('revealVotes', { roomCode: currentRoom.code, playerId: currentPlayer.id, title, link })
+  }, [])
+
+  const updateRoundDecision = useCallback((roundId: number, finalDecision: string) => {
+    const socket = getSocket()
+    const { currentRoom, currentPlayer } = useGameStore.getState()
+    if (!currentRoom || !currentPlayer?.isHost) return
+    socket.emit('updateRoundDecision', { roomCode: currentRoom.code, playerId: currentPlayer.id, roundId, finalDecision })
   }, [])
 
   const resetRound = useCallback(() => {
@@ -305,7 +321,7 @@ export function useSocket() {
     const history = state.roundHistory
     if (!history.length || !currentRoom) return
 
-    const headers = ['Round', 'Date', 'Player', 'Vote', 'Average']
+    const headers = ['Round', 'Date', 'Title', 'Link', 'Player', 'Vote', 'Average', 'Final Decision']
     const rows: string[] = []
     
     history.forEach((round: RoundHistory) => {
@@ -313,9 +329,12 @@ export function useSocket() {
         rows.push([
           round.roundNumber,
           new Date(round.createdAt).toLocaleString(),
+          round.title || '',
+          round.link || '',
           vote.playerName,
           vote.vote,
-          round.average
+          round.average,
+          round.finalDecision || ''
         ].join(','))
       })
     })
@@ -340,6 +359,7 @@ export function useSocket() {
     currentPlayer,
     error,
     gameShouldStart,
+    currentRoundId,
     roundHistory,
     sessionStats,
     showSessionReport,
@@ -353,6 +373,7 @@ export function useSocket() {
     kickPlayer,
     getRoundHistory,
     getSessionStats,
+    updateRoundDecision,
     exportToCSV,
     clearError: () => setError(null),
     clearGameStart: () => setGameShouldStart(false),

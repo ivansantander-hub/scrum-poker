@@ -89,6 +89,24 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
         }
       });
 
+      this.db.run(`ALTER TABLE rounds ADD COLUMN title TEXT`, (err: any) => {
+        if (err && !err.message?.includes('duplicate column')) {
+          console.log('Title column check:', err.message);
+        }
+      });
+
+      this.db.run(`ALTER TABLE rounds ADD COLUMN link TEXT`, (err: any) => {
+        if (err && !err.message?.includes('duplicate column')) {
+          console.log('Link column check:', err.message);
+        }
+      });
+
+      this.db.run(`ALTER TABLE rounds ADD COLUMN final_decision TEXT`, (err: any) => {
+        if (err && !err.message?.includes('duplicate column')) {
+          console.log('Final decision column check:', err.message);
+        }
+      });
+
       this.db.run(`CREATE INDEX IF NOT EXISTS idx_rounds_room ON rounds(room_id)`);
 
       console.log('Database tables initialized');
@@ -99,14 +117,27 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     return this.db;
   }
 
-  saveRound(roomId: string, roundNumber: number, votes: any, average: string, stdDev?: string): Promise<number> {
+  saveRound(roomId: string, roundNumber: number, votes: any, average: string, stdDev?: string, title?: string, link?: string): Promise<number> {
     return new Promise((resolve, reject) => {
       this.db.run(
-        `INSERT INTO rounds (room_id, round_number, votes, average, std_dev) VALUES (?, ?, ?, ?, ?)`,
-        [roomId, roundNumber, JSON.stringify(votes), average, stdDev || null],
+        `INSERT INTO rounds (room_id, round_number, votes, average, std_dev, title, link) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [roomId, roundNumber, JSON.stringify(votes), average, stdDev || null, title || null, link || null],
         function(err) {
           if (err) reject(err);
           else resolve(this.lastID);
+        }
+      );
+    });
+  }
+
+  updateRoundDecision(roundId: number, finalDecision: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      this.db.run(
+        `UPDATE rounds SET final_decision = ? WHERE id = ?`,
+        [finalDecision, roundId],
+        function(err) {
+          if (err) reject(err);
+          else resolve();
         }
       );
     });
@@ -125,6 +156,9 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
             votes: JSON.parse(row.votes),
             average: row.average,
             stdDev: row.std_dev,
+            title: row.title || undefined,
+            link: row.link || undefined,
+            finalDecision: row.final_decision || undefined,
             createdAt: row.created_at
           })));
         }
@@ -146,6 +180,9 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
               votes: JSON.parse(row.votes),
               average: row.average,
               stdDev: row.std_dev,
+              title: row.title || undefined,
+              link: row.link || undefined,
+              finalDecision: row.final_decision || undefined,
               createdAt: row.created_at
             }));
             

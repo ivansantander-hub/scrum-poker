@@ -99,10 +99,13 @@ function PlayerAvatar({ name, avatar, hasVoted, onDoubleClick }: { name: string;
 
 export function GameBoard({ room, player, onLeaveGame, onSubmitVote, onReveal, onReset }: GameBoardProps) {
   const { language, toggleLanguage, clearLocalVote, triggerClearLocalVote } = useGameStore()
-  const { getRoundHistory, getSessionStats, showSessionReport, closeSessionReport, kickPlayer } = useSocket()
+  const { getRoundHistory, getSessionStats, showSessionReport, closeSessionReport, kickPlayer, revealVotes, updateRoundDecision, currentRoundId } = useSocket()
   const [showConfirm, setShowConfirm] = useState(false)
   const [showKickConfirm, setShowKickConfirm] = useState<{ show: boolean; playerId: string; playerName: string } | null>(null)
   const [customHourInput, setCustomHourInput] = useState('')
+  const [roundTitle, setRoundTitle] = useState('')
+  const [roundLink, setRoundLink] = useState('')
+  const [finalDecision, setFinalDecision] = useState('')
   const [localSelectedVote, setLocalSelectedVote] = useState<string | undefined>(player.vote)
   const [previewAvatar, setPreviewAvatar] = useState<string | null>(null)
   const [showHistory, setShowHistory] = useState(false)
@@ -158,7 +161,7 @@ export function GameBoard({ room, player, onLeaveGame, onSubmitVote, onReveal, o
       if (e.code === 'Space' && player.isHost && !room.isRevealed && room.players.filter(p => p.hasVoted).length >= 2) {
         e.preventDefault()
         onReveal()
-        soundManager.enable() // Ensure audio context is ready
+        soundManager.enable()
         soundManager.playReveal()
       }
 
@@ -204,6 +207,17 @@ export function GameBoard({ room, player, onLeaveGame, onSubmitVote, onReveal, o
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [room, player, cards, onReveal, handleVote])
+
+  const handleRevealWithMetadata = () => {
+    revealVotes(roundTitle || undefined, roundLink || undefined)
+    onReveal()
+  }
+
+  const handleSaveDecision = () => {
+    const decision = finalDecision.trim()
+    if (!decision || !currentRoundId) return
+    updateRoundDecision(currentRoundId, decision)
+  }
 
   const handleKickClick = (targetPlayer: Player) => {
     if (targetPlayer.id === player.id) return
@@ -425,16 +439,35 @@ export function GameBoard({ room, player, onLeaveGame, onSubmitVote, onReveal, o
                 </motion.div>
               )}
               {player.isHost && room.players.filter(p => p.hasVoted).length >= 2 && (
-                <motion.button 
-                  className="btn btn-primary btn-large" 
-                  onClick={onReveal}
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
+                <motion.div
+                  className="round-metadata"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.1, duration: 0.3 }}
                 >
-                  {t('revealAll', language)} ({room.players.filter(p => p.hasVoted).length}/{room.players.length})
-                </motion.button>
+                  <input
+                    type="text"
+                    className="round-meta-input"
+                    placeholder={t('roundTitlePlaceholder', language)}
+                    value={roundTitle}
+                    onChange={(e) => setRoundTitle(e.target.value)}
+                  />
+                  <input
+                    type="text"
+                    className="round-meta-input"
+                    placeholder={t('roundLinkPlaceholder', language)}
+                    value={roundLink}
+                    onChange={(e) => setRoundLink(e.target.value)}
+                  />
+                  <motion.button 
+                    className="btn btn-primary btn-large" 
+                    onClick={handleRevealWithMetadata}
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                  >
+                    {t('revealAll', language)} ({room.players.filter(p => p.hasVoted).length}/{room.players.length})
+                  </motion.button>
+                </motion.div>
               )}
               <p className="shortcuts-hint">{t('shortcutsHint', language)}</p>
             </motion.div>
@@ -466,6 +499,33 @@ export function GameBoard({ room, player, onLeaveGame, onSubmitVote, onReveal, o
                   </div>
                 ))}
               </div>
+              {player.isHost && (
+                <motion.div
+                  className="final-decision-section"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.2, duration: 0.3 }}
+                >
+                  <div className="final-decision-field">
+                    <input
+                      type="text"
+                      className="round-meta-input"
+                      placeholder={t('finalDecisionPlaceholder', language)}
+                      value={finalDecision}
+                      onChange={(e) => setFinalDecision(e.target.value)}
+                    />
+                    <motion.button
+                      className="btn btn-small"
+                      onClick={handleSaveDecision}
+                      disabled={!finalDecision.trim() || !currentRoundId}
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                    >
+                      {t('saveDecision', language)}
+                    </motion.button>
+                  </div>
+                </motion.div>
+              )}
             </motion.div>
           )}
         </AnimatePresence>

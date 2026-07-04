@@ -83,6 +83,20 @@ export function RoundHistoryPanel({ isOpen, onClose }: RoundHistoryProps) {
                           )}
                         </span>
                       </div>
+                      {(round.title || round.link) && (
+                        <div className="round-meta">
+                          {round.title && <span className="round-meta-title">{round.title}</span>}
+                          {round.link && (
+                            <a href={round.link} target="_blank" rel="noopener noreferrer" className="round-meta-link">
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+                                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+                              </svg>
+                              {round.link}
+                            </a>
+                          )}
+                        </div>
+                      )}
                       <div className="round-votes">
                         {round.votes.map((v, idx) => (
                           <span key={idx} className="round-vote-item">
@@ -90,6 +104,12 @@ export function RoundHistoryPanel({ isOpen, onClose }: RoundHistoryProps) {
                           </span>
                         ))}
                       </div>
+                      {round.finalDecision && (
+                        <div className="round-decision">
+                          <span className="decision-label">{language === 'en' ? 'Final' : 'Decisión'}:</span>
+                          <strong>{round.finalDecision}</strong>
+                        </div>
+                      )}
                     </motion.div>
                   ))}
                 </div>
