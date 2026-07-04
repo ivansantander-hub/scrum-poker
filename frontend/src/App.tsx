@@ -40,7 +40,7 @@ function AppContent() {
   const [prefilledRoomCode, setPrefilledRoomCode] = useState<string | null>(null)
   const [notFoundRoomCode, setNotFoundRoomCode] = useState<string | null>(null)
   const { currentRoom, currentPlayer, language, wasKicked, error } = useGameStore()
-  const { setWasKicked, setError: clearStoreError } = useGameStore.getState()
+  const { setError: clearStoreError } = useGameStore.getState()
   const {
     gameShouldStart,
     createRoom,

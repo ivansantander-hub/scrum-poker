@@ -32,12 +32,7 @@ export function useSocket() {
     gameShouldStart,
     currentRoundId,
     roundHistory,
-    setRoom,
-    setPlayer,
-    setError,
-    setGameShouldStart,
     closeSessionReport,
-    reset,
   } = useGameStore()
 
   const createRoom = useCallback((playerName: string, estimationType: 'fibonacci' | 'hours', avatar: string) => {
