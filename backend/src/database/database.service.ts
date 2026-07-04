@@ -14,10 +14,18 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     }
 
     const dbPath = path.join(dataDir, 'scrum-poker.db');
-    this.db = new sqlite3.Database(dbPath);
-    console.log('Database connected:', dbPath);
+    this.db = new sqlite3.Database(dbPath, (err) => {
+      if (err) {
+        console.error('Failed to open database:', err);
+        return;
+      }
+      console.log('Database connected:', dbPath);
+      this.initializeTables();
+    });
 
-    this.initializeTables();
+    this.db.on('error', (err) => {
+      console.error('Database error:', err);
+    });
   }
 
   onModuleDestroy() {
