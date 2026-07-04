@@ -95,7 +95,7 @@ function AppContent() {
             id: string
             email: string
             name: string
-            role: string
+            role: 'user' | 'god'
           } | null
           if (me && refreshResult.accessToken) {
             setAuth(me, refreshResult.accessToken)

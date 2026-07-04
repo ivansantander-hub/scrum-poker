@@ -1,4 +1,5 @@
-import { useState, FormEvent } from 'react'
+import { useState } from 'react'
+import type { FormEvent } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { authApi, ApiError } from '../lib/api'
 import { useAuthStore } from '../hooks/useAuthStore'
@@ -54,13 +55,13 @@ export function AuthScreen() {
       if (mode === 'login') {
         const result = (await authApi.login(email.trim(), password)) as {
           accessToken: string
-          user: { id: string; email: string; name: string; role: string }
+          user: { id: string; email: string; name: string; role: 'user' | 'god' }
         }
         setAuth(result.user, result.accessToken)
       } else {
         const result = (await authApi.register(email.trim(), password, name.trim())) as {
           accessToken: string
-          user: { id: string; email: string; name: string; role: string }
+          user: { id: string; email: string; name: string; role: 'user' | 'god' }
         }
         setAuth(result.user, result.accessToken)
       }
