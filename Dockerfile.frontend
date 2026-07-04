@@ -16,7 +16,6 @@ RUN pnpm build:frontend
 FROM nginx:alpine
 
 COPY --from=builder /app/frontend/dist /usr/share/nginx/html
-COPY --from=builder /app/frontend/public/characters /usr/share/nginx/html/characters
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 80
