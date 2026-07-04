@@ -5,6 +5,7 @@ export interface PlayerRow {
   id: string;
   room_id: string;
   socket_id: string | null;
+  user_id: string | null;
   name: string;
   avatar: string;
   is_host: number;
@@ -17,16 +18,24 @@ export interface PlayerRow {
 export class PlayerRepository {
   constructor(private databaseService: DatabaseService) {}
 
-  create(id: string, roomId: string, name: string, avatar: string, isHost: boolean, socketId?: string): Promise<void> {
+  create(
+    id: string,
+    roomId: string,
+    name: string,
+    avatar: string,
+    isHost: boolean,
+    socketId?: string,
+    userId?: string,
+  ): Promise<void> {
     return new Promise((resolve, reject) => {
       const db = this.databaseService.getDatabase();
       db.run(
-        `INSERT INTO players (id, room_id, name, avatar, is_host, socket_id) VALUES (?, ?, ?, ?, ?, ?)`,
-        [id, roomId, name, avatar, isHost ? 1 : 0, socketId || null],
+        `INSERT INTO players (id, room_id, name, avatar, is_host, socket_id, user_id) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [id, roomId, name, avatar, isHost ? 1 : 0, socketId || null, userId || null],
         (err) => {
           if (err) reject(err);
           else resolve();
-        }
+        },
       );
     });
   }
@@ -68,7 +77,21 @@ export class PlayerRepository {
         (err, row) => {
           if (err) reject(err);
           else resolve(row as PlayerRow | undefined);
-        }
+        },
+      );
+    });
+  }
+
+  findByRoomIdAndUserId(roomId: string, userId: string): Promise<PlayerRow | undefined> {
+    return new Promise((resolve, reject) => {
+      const db = this.databaseService.getDatabase();
+      db.get(
+        `SELECT * FROM players WHERE room_id = ? AND user_id = ?`,
+        [roomId, userId],
+        (err, row) => {
+          if (err) reject(err);
+          else resolve(row as PlayerRow | undefined);
+        },
       );
     });
   }
