@@ -8,13 +8,10 @@ dist
 README.md
 DEPLOY.md
 docker-compose.yml
-Dockerfile*
-nginx.conf
 *.md
 .gitignore
-tsconfig*.json
-eslint*
-.prettier*
 coverage
 .vscode
 .idea
+backend/data
+frontend/frontend.pid

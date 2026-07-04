@@ -52,6 +52,9 @@ interface GameState {
   showSessionReport: boolean
   roundHistory: RoundHistory[]
   wasKicked: boolean
+  error: string | null
+  gameShouldStart: boolean
+  currentRoundId: number | null
   
   setRoom: (room: Room | null) => void
   setPlayer: (player: Player | null) => void
@@ -70,6 +73,9 @@ interface GameState {
   closeSessionReport: () => void
   setRoundHistory: (history: RoundHistory[]) => void
   setWasKicked: (kicked: boolean) => void
+  setError: (error: string | null) => void
+  setGameShouldStart: (start: boolean) => void
+  setCurrentRoundId: (id: number | null) => void
   reset: () => void
 }
 
@@ -88,6 +94,9 @@ export const useGameStore = create<GameState>()(
       showSessionReport: false,
       roundHistory: [],
       wasKicked: false,
+      error: null,
+      gameShouldStart: false,
+      currentRoundId: null,
 
       setRoom: (room) => set({ currentRoom: room }),
       
@@ -156,14 +165,18 @@ export const useGameStore = create<GameState>()(
       
       setWasKicked: (kicked) => set({ wasKicked: kicked }),
       
-      reset: () => set({ currentRoom: null, currentPlayer: null, socketId: null, isConnected: false, clearLocalVote: false, roundHistory: [], sessionStats: null, showSessionReport: false, wasKicked: false }),
+      setError: (error) => set({ error }),
+      
+      setGameShouldStart: (start) => set({ gameShouldStart: start }),
+      
+      setCurrentRoundId: (id) => set({ currentRoundId: id }),
+      
+      reset: () => set({ currentRoom: null, currentPlayer: null, socketId: null, isConnected: false, clearLocalVote: false, roundHistory: [], sessionStats: null, showSessionReport: false, wasKicked: false, error: null, gameShouldStart: false, currentRoundId: null }),
     }),
     {
       name: 'scrum-poker-storage',
+      version: 1,
       partialize: (state) => ({
-        currentRoom: state.currentRoom,
-        currentPlayer: state.currentPlayer,
-        socketId: state.socketId,
         language: state.language,
         savedName: state.savedName,
         savedAvatar: state.savedAvatar,

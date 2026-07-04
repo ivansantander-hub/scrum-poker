@@ -38,6 +38,7 @@ export function Lobby({ room, player, onStartGame, onJoinGame, onLeaveRoom }: Lo
   const [showShareMenu, setShowShareMenu] = useState(false)
   const [previewAvatar, setPreviewAvatar] = useState<string | null>(null)
   const [showKickConfirm, setShowKickConfirm] = useState<{ show: boolean; playerId: string; playerName: string } | null>(null)
+  const [copyFeedback, setCopyFeedback] = useState<string | null>(null)
   const isHost = player.isHost
   const gameAlreadyStarted = room.isStarted
 
@@ -59,13 +60,22 @@ export function Lobby({ room, player, onStartGame, onJoinGame, onLeaveRoom }: Lo
     return url.toString()
   }
 
+  const showCopyToast = (text: string) => {
+    setCopyFeedback(text)
+    setTimeout(() => setCopyFeedback(null), 2000)
+  }
+
   const copyCodeToClipboard = () => {
     navigator.clipboard.writeText(room.code)
+      .then(() => showCopyToast(t('copied', language)))
+      .catch(() => showCopyToast(t('copyFailed', language)))
     setShowShareMenu(false)
   }
 
   const copyLinkToClipboard = () => {
     navigator.clipboard.writeText(getShareUrl())
+      .then(() => showCopyToast(t('copied', language)))
+      .catch(() => showCopyToast(t('copyFailed', language)))
     setShowShareMenu(false)
   }
 
@@ -346,6 +356,21 @@ export function Lobby({ room, player, onStartGame, onJoinGame, onLeaveRoom }: Lo
         </motion.div>
       )}
       <AvatarPreviewModal avatar={previewAvatar} onClose={() => setPreviewAvatar(null)} />
+      <AnimatePresence>
+        {copyFeedback && (
+          <motion.div
+            className="copy-toast"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            transition={{ duration: 0.2 }}
+            role="status"
+            aria-live="polite"
+          >
+            {copyFeedback}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </>
   )
 }

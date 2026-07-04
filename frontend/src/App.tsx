@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { RoomManager } from './components/RoomManager'
 import { Lobby } from './components/Lobby'
@@ -8,6 +8,7 @@ import { RoomNotFound } from './components/RoomNotFound'
 import { KickedOut } from './components/KickedOut'
 import { useSocket } from './hooks/useSocket'
 import { useGameStore } from './hooks/useGameStore'
+import { getSocket } from './hooks/socket'
 import './App.css'
 
 type View = 'rooms' | 'lobby' | 'game' | 'not-found' | 'kicked'
@@ -36,12 +37,11 @@ const TITLES: Record<string, { en: string; es: string }> = {
 }
 
 function AppContent() {
-  const [view, setView] = useState<View>('rooms')
   const [prefilledRoomCode, setPrefilledRoomCode] = useState<string | null>(null)
   const [notFoundRoomCode, setNotFoundRoomCode] = useState<string | null>(null)
-  const { currentRoom, currentPlayer, language, wasKicked, setWasKicked } = useGameStore()
+  const { currentRoom, currentPlayer, language, wasKicked, error } = useGameStore()
+  const { setWasKicked, setError: clearStoreError } = useGameStore.getState()
   const {
-    error,
     gameShouldStart,
     createRoom,
     joinRoom,
@@ -57,54 +57,32 @@ function AppContent() {
   const { reset } = useGameStore()
 
   useEffect(() => {
+    getSocket()
+  }, [])
+
+  useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const roomCode = params.get('room')
     if (roomCode) {
       setPrefilledRoomCode(roomCode.toUpperCase())
-      setView('rooms')
     }
   }, [])
 
+  const isNotFoundError = error && (error.toLowerCase().includes('not found') || error.toLowerCase().includes('no existe') || error.toLowerCase().includes('does not exist'))
+
+  const view: View = useMemo(() => {
+    if (wasKicked) return 'kicked'
+    if (isNotFoundError) return 'not-found'
+    if (!currentRoom || !currentPlayer) return 'rooms'
+    if (currentRoom.isStarted || gameShouldStart) return 'game'
+    return 'lobby'
+  }, [wasKicked, isNotFoundError, currentRoom, currentPlayer, gameShouldStart])
+
   useEffect(() => {
-    if (error && (error.toLowerCase().includes('not found') || error.toLowerCase().includes('no existe') || error.toLowerCase().includes('does not exist'))) {
+    if (isNotFoundError) {
       setNotFoundRoomCode(prefilledRoomCode)
-      setView('not-found')
     }
-  }, [error, prefilledRoomCode])
-
-  useEffect(() => {
-    if (wasKicked) {
-      setView('kicked')
-      setWasKicked(false)
-    }
-  }, [wasKicked, setWasKicked])
-
-  useEffect(() => {
-    if (currentRoom && currentPlayer && view !== 'not-found') {
-      if (currentRoom.isStarted) {
-        setView('game')
-      } else {
-        setView('lobby')
-      }
-    }
-  }, [currentRoom, currentPlayer])
-
-  useEffect(() => {
-    if (gameShouldStart && view === 'lobby') {
-      setView('game')
-      clearGameStart()
-    }
-  }, [gameShouldStart, view, clearGameStart])
-
-  useEffect(() => {
-    if (currentRoom && currentPlayer) {
-      if (currentRoom.isStarted) {
-        setView('game')
-      } else {
-        setView('lobby')
-      }
-    }
-  }, [])
+  }, [isNotFoundError, prefilledRoomCode])
 
   useEffect(() => {
     const lang = language as 'en' | 'es'
@@ -133,7 +111,6 @@ function AppContent() {
 
   const handleCreateRoom = (_code: string, name: string, type: 'fibonacci' | 'hours', avatar: string) => {
     createRoom(name, type, avatar)
-    setView('lobby')
     clearPrefilledCode()
   }
 
@@ -151,20 +128,18 @@ function AppContent() {
 
   const handleStartGame = () => {
     startGame()
-    setView('game')
   }
 
   const handleJoinGame = () => {
-    setView('game')
+    clearGameStart()
   }
 
   const handleLeaveRoom = () => {
     leaveRoom()
-    setView('rooms')
   }
 
   const handleLeaveGame = () => {
-    setView('lobby')
+    // Returns to lobby view (room.isStarted stays true on server)
   }
 
   const handleSubmitVote = (vote: string) => {
@@ -182,10 +157,10 @@ function AppContent() {
   const handleGoHome = () => {
     setNotFoundRoomCode(null)
     setPrefilledRoomCode(null)
-    setWasKicked(false)
+    clearStoreError(null)
+    useGameStore.getState().setWasKicked(false)
     clearError()
     reset()
-    setView('rooms')
     const url = new URL(window.location.href)
     url.searchParams.delete('room')
     window.history.replaceState({}, '', url.toString())

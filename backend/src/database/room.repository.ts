@@ -96,6 +96,20 @@ export class RoomRepository {
     });
   }
 
+  updateHostId(id: string, hostId: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const db = this.databaseService.getDatabase();
+      db.run(
+        `UPDATE rooms SET host_id = ? WHERE id = ?`,
+        [hostId, id],
+        (err) => {
+          if (err) reject(err);
+          else resolve();
+        }
+      );
+    });
+  }
+
   incrementRoundCount(id: string): Promise<void> {
     return new Promise((resolve, reject) => {
       const db = this.databaseService.getDatabase();

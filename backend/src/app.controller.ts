@@ -5,6 +5,11 @@ import { AppService } from './app.service';
 export class AppController {
   constructor(private readonly appService: AppService) {}
 
+  @Get('health')
+  getHealth() {
+    return { status: 'ok', timestamp: new Date().toISOString() };
+  }
+
   @Get('avatars')
   getAvatars(): string[] {
     return this.appService.getAvatars();

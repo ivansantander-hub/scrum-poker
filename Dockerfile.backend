@@ -2,21 +2,30 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-COPY package*.json ./
-COPY pnpm-lock.yaml ./
-RUN npm install -g pnpm && pnpm install
+RUN corepack enable && corepack prepare pnpm@9 --activate
 
-COPY . .
+COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
+COPY backend/package.json ./backend/
+COPY frontend/package.json ./frontend/
+
+RUN pnpm install --frozen-lockfile
+
+COPY backend ./backend
 RUN pnpm build:backend
 
 FROM node:20-alpine
 
 WORKDIR /app
 
-COPY --from=builder /app/backend/package*.json ./
-COPY --from=builder /app/backend/dist ./dist
+RUN corepack enable && corepack prepare pnpm@9 --activate
 
-RUN npm install -g pnpm && pnpm install --prod
+COPY --from=builder /app/backend/dist ./dist
+COPY --from=builder /app/backend/node_modules ./node_modules
+COPY --from=builder /app/backend/package.json ./
+
+RUN mkdir -p /app/data
+
+USER node
 
 EXPOSE 3000
 
