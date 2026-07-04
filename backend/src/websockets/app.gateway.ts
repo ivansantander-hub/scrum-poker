@@ -113,6 +113,15 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const playerInfo = this.socketToPlayer.get(client.id);
     if (playerInfo) {
       this.socketToPlayer.delete(client.id);
+
+      this.playerRepository.clearSocketId(playerInfo.playerId).then(async () => {
+        const room = await this.roomRepository.findById(playerInfo.roomId);
+        if (room) {
+          const fullRoom = await this.buildRoomFromDb(room, !!room.is_revealed);
+          this.server.to(room.code).emit('roomState', { room: fullRoom });
+        }
+      }).catch(() => {});
+
       const timer = setTimeout(() => {
         this.handlePlayerDisconnect(playerInfo.roomId, playerInfo.playerId);
         this.disconnectTimers.delete(playerInfo.playerId);
@@ -124,8 +133,8 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
   private async handlePlayerDisconnect(roomId: string, playerId: string) {
     try {
       const player = await this.playerRepository.findById(playerId);
-      if (!player || player.socket_id) return;
-      await this.playerRepository.clearSocketId(playerId);
+      if (!player) return;
+      if (player.socket_id) return;
       this.server.to(roomId).emit('playerLeft', { playerId });
     } catch (error) {
       this.logger.error('Error handling player disconnect', error instanceof Error ? error.stack : undefined);

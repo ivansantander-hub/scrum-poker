@@ -56,20 +56,22 @@
 
 .refresh-avatars-btn {
   margin-top: 0.5rem;
-  padding: 0.3rem 0.6rem;
-  font-size: 0.625rem;
-  font-weight: 500;
+  padding: 0.4rem;
   color: var(--text-muted);
-  background: transparent;
-  border: none;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+  border-radius: 50%;
   cursor: pointer;
-  transition: all 0.2s;
-  opacity: 0.6;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .refresh-avatars-btn:hover {
-  opacity: 1;
-  color: var(--accent);
+  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--accent, #f59e0b);
+  color: var(--accent, #f59e0b);
 }
 
 .avatar-modal-overlay {

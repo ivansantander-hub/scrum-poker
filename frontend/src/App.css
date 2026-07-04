@@ -711,12 +711,33 @@ body::after {
 }
 
 .vote-avatar-wrapper {
+  position: relative;
   width: 44px;
   height: 44px;
   border-radius: 50%;
-  overflow: hidden;
+  overflow: visible;
   border: 2px solid var(--border);
   transition: all 0.3s ease;
+}
+
+.online-indicator {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid var(--bg, #08080c);
+  transition: background-color 0.3s ease;
+}
+
+.online-indicator.online {
+  background-color: #22c55e;
+  box-shadow: 0 0 6px rgba(34, 197, 94, 0.6);
+}
+
+.online-indicator.offline {
+  background-color: #6b7280;
 }
 
 .vote-card.voted .vote-avatar-wrapper {
@@ -728,6 +749,9 @@ body::after {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  border-radius: 50%;
+  overflow: hidden;
+  display: block;
 }
 
 .vote-avatar-initial {
@@ -1747,6 +1771,63 @@ body::after {
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
   border: 1px solid var(--border);
   z-index: 9999;
+}
+
+/* ==================== EDIT PROFILE MODAL ==================== */
+.edit-profile-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9000;
+}
+
+.edit-profile-modal {
+  background: var(--surface-solid);
+  backdrop-filter: var(--glass);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 2rem;
+  width: min(400px, 90vw);
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: 0 32px 64px rgba(0, 0, 0, 0.5);
+}
+
+.edit-profile-modal h3 {
+  margin: 0 0 1.25rem;
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.edit-profile-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.edit-profile-form label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.edit-profile-avatars {
+  margin: 0.25rem 0;
+}
+
+.edit-profile-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-top: 1rem;
 }
 
 /* ==================== SOUND TOGGLE ==================== */
