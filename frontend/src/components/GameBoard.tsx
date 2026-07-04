@@ -6,6 +6,7 @@ import { useSocket } from '../hooks/useSocket'
 import { t } from '../i18n'
 import { ConfirmDialog } from './ConfirmDialog'
 import { AvatarPreviewModal } from './AvatarPreviewModal'
+import { AvatarSelector } from './AvatarSelector'
 import { RoundHistoryPanel } from './RoundHistory'
 import { SessionReport } from './SessionReport'
 import { soundManager } from '../utils/sound'
@@ -69,7 +70,7 @@ function calculateAverage(votes: (string | undefined)[]): string {
   return Number.isInteger(avg) ? avg.toString() : avg.toFixed(1)
 }
 
-function PlayerAvatar({ name, avatar, hasVoted, onDoubleClick }: { name: string; avatar: string; hasVoted: boolean; onDoubleClick?: () => void }) {
+function PlayerAvatar({ name, avatar, hasVoted, isOnline, onDoubleClick }: { name: string; avatar: string; hasVoted: boolean; isOnline: boolean; onDoubleClick?: () => void }) {
   const [imgError, setImgError] = useState(false)
   const avatarSrc = `/characters/${avatar || 'vincent.webp'}`
   
@@ -93,6 +94,7 @@ function PlayerAvatar({ name, avatar, hasVoted, onDoubleClick }: { name: string;
       >
         {name.charAt(0).toUpperCase()}
       </motion.span>
+      <span className={`online-indicator ${isOnline ? 'online' : 'offline'}`} />
     </div>
   )
 }
@@ -102,6 +104,9 @@ export function GameBoard({ room, player, onLeaveGame, onSubmitVote, onReveal, o
   const { getRoundHistory, getSessionStats, showSessionReport, closeSessionReport, kickPlayer, revealVotes, updateRoundDecision, currentRoundId, changeEstimationType, updateProfile } = useSocket()
   const [showConfirm, setShowConfirm] = useState(false)
   const [showKickConfirm, setShowKickConfirm] = useState<{ show: boolean; playerId: string; playerName: string } | null>(null)
+  const [showEditProfile, setShowEditProfile] = useState(false)
+  const [editName, setEditName] = useState(player.name)
+  const [editAvatar, setEditAvatar] = useState(player.avatar)
   const [customHourInput, setCustomHourInput] = useState('')
   const [roundTitle, setRoundTitle] = useState('')
   const [roundLink, setRoundLink] = useState('')
@@ -247,6 +252,16 @@ export function GameBoard({ room, player, onLeaveGame, onSubmitVote, onReveal, o
     setShowConfirm(true)
   }
 
+  const handleSaveProfile = () => {
+    const trimmedName = editName.trim()
+    if (!trimmedName) return
+    updateProfile(
+      trimmedName !== player.name ? trimmedName : undefined,
+      editAvatar !== player.avatar ? editAvatar : undefined,
+    )
+    setShowEditProfile(false)
+  }
+
   const handleConfirmExit = () => {
     setShowConfirm(false)
     onLeaveGame()
@@ -334,6 +349,18 @@ export function GameBoard({ room, player, onLeaveGame, onSubmitVote, onReveal, o
         >
           {soundEnabled ? '🔊' : '🔇'}
         </motion.button>
+        <motion.button
+          className="btn-icon"
+          onClick={() => { setEditName(player.name); setEditAvatar(player.avatar); setShowEditProfile(true) }}
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          title={language === 'en' ? 'Edit profile' : 'Editar perfil'}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+            <circle cx="12" cy="7" r="4"/>
+          </svg>
+        </motion.button>
       </header>
 
       <main className="game-main">
@@ -350,7 +377,7 @@ export function GameBoard({ room, player, onLeaveGame, onSubmitVote, onReveal, o
               variants={playerCardVariants}
               layout
             >
-              <PlayerAvatar name={p.name} avatar={p.avatar} hasVoted={p.hasVoted} onDoubleClick={() => setPreviewAvatar(p.avatar)} />
+              <PlayerAvatar name={p.name} avatar={p.avatar} hasVoted={p.hasVoted} isOnline={!!p.socketId} onDoubleClick={() => setPreviewAvatar(p.avatar)} />
               <span className="vote-name">
                 {p.name}
                 {p.id === player.id && <span className="you-indicator">({t('you', language)})</span>}
@@ -641,6 +668,57 @@ export function GameBoard({ room, player, onLeaveGame, onSubmitVote, onReveal, o
     />
     <AvatarPreviewModal avatar={previewAvatar} onClose={() => setPreviewAvatar(null)} />
     <RoundHistoryPanel isOpen={showHistory} onClose={() => setShowHistory(false)} />
+
+    <AnimatePresence>
+      {showEditProfile && (
+        <motion.div
+          className="edit-profile-overlay"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          onClick={() => setShowEditProfile(false)}
+        >
+          <motion.div
+            className="edit-profile-modal"
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.9, opacity: 0 }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3>{language === 'en' ? 'Edit Profile' : 'Editar Perfil'}</h3>
+            <div className="edit-profile-form">
+              <label>{language === 'en' ? 'Name' : 'Nombre'}</label>
+              <input
+                type="text"
+                className="round-meta-input"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                maxLength={30}
+                autoFocus
+              />
+              <label>{language === 'en' ? 'Avatar' : 'Avatar'}</label>
+              <div className="edit-profile-avatars">
+                {room.players.length > 0 && (
+                  <AvatarSelector selectedAvatar={editAvatar} onSelect={setEditAvatar} />
+                )}
+              </div>
+              <div className="edit-profile-actions">
+                <button className="btn btn-small" onClick={() => setShowEditProfile(false)}>
+                  {language === 'en' ? 'Cancel' : 'Cancelar'}
+                </button>
+                <button
+                  className="btn btn-primary btn-small"
+                  onClick={handleSaveProfile}
+                  disabled={!editName.trim()}
+                >
+                  {language === 'en' ? 'Save' : 'Guardar'}
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
     <AnimatePresence>
       {showSessionReport && (
         <SessionReport showSessionReport={showSessionReport} onClose={closeSessionReport} />
