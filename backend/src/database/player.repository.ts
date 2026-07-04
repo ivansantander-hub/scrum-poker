@@ -132,21 +132,26 @@ export class PlayerRepository {
   updateHostByRoomId(roomId: string, newHostId: string): Promise<void> {
     return new Promise((resolve, reject) => {
       const db = this.databaseService.getDatabase();
-      db.run(
-        `UPDATE players SET is_host = 0 WHERE room_id = ?`,
-        [roomId],
-        (err) => {
-          if (err) reject(err);
-        }
-      );
-      db.run(
-        `UPDATE players SET is_host = 1 WHERE id = ?`,
-        [newHostId],
-        (err) => {
-          if (err) reject(err);
-          else resolve();
-        }
-      );
+      db.serialize(() => {
+        db.run(
+          `UPDATE players SET is_host = 0 WHERE room_id = ?`,
+          [roomId],
+          (err) => {
+            if (err) {
+              reject(err);
+              return;
+            }
+          }
+        );
+        db.run(
+          `UPDATE players SET is_host = 1 WHERE id = ?`,
+          [newHostId],
+          (err) => {
+            if (err) reject(err);
+            else resolve();
+          }
+        );
+      });
     });
   }
 
