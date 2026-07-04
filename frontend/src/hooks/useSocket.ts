@@ -125,6 +125,20 @@ export function useSocket() {
     socket.emit('getSessionStats', { roomCode })
   }, [])
 
+  const changeEstimationType = useCallback((estimationType: 'fibonacci' | 'hours') => {
+    const socket = getSocket()
+    const { currentRoom, currentPlayer } = useGameStore.getState()
+    if (!currentRoom || !currentPlayer?.isHost) return
+    socket.emit('changeEstimationType', { roomCode: currentRoom.code, playerId: currentPlayer.id, estimationType })
+  }, [])
+
+  const updateProfile = useCallback((playerName?: string, avatar?: string) => {
+    const socket = getSocket()
+    const { currentRoom, currentPlayer } = useGameStore.getState()
+    if (!currentRoom || !currentPlayer) return
+    socket.emit('updateProfile', { roomCode: currentRoom.code, playerId: currentPlayer.id, playerName, avatar })
+  }, [])
+
   const exportToCSV = useCallback(() => {
     const state = useGameStore.getState()
     const currentRoom = state.currentRoom
@@ -192,6 +206,8 @@ export function useSocket() {
     getRoundHistory,
     getSessionStats,
     updateRoundDecision,
+    changeEstimationType,
+    updateProfile,
     exportToCSV,
     clearError: () => useGameStore.getState().setError(null),
     clearGameStart: () => useGameStore.getState().setGameShouldStart(false),

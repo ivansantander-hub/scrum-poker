@@ -28,7 +28,7 @@ import { join } from 'path';
     }),
     ServeStaticModule.forRoot({
       rootPath: join(__dirname, 'public'),
-      exclude: ['/api/(.*)', '/socket.io/(.*)'],
+      exclude: ['/health', '/avatars', '/socket.io/{*path}'],
     }),
   ],
   controllers: [AppController],

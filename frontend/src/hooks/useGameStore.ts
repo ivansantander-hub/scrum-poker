@@ -175,11 +175,13 @@ export const useGameStore = create<GameState>()(
     }),
     {
       name: 'scrum-poker-storage',
-      version: 1,
+      version: 2,
       partialize: (state) => ({
         language: state.language,
         savedName: state.savedName,
         savedAvatar: state.savedAvatar,
+        currentRoom: state.currentRoom,
+        currentPlayer: state.currentPlayer,
       }),
     }
   )

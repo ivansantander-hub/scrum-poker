@@ -693,6 +693,84 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }
   }
 
+  @SubscribeMessage('changeEstimationType')
+  async handleChangeEstimationType(client: Socket, data: { roomCode: string; playerId: string; estimationType: 'fibonacci' | 'hours' }) {
+    try {
+      const auth = this.getAuthenticatedPlayer(client);
+      if (!auth || auth.playerId !== data.playerId) {
+        client.emit('error', { message: 'Unauthorized' });
+        return;
+      }
+
+      const roomCode = this.normalizeCode(data.roomCode);
+      const room = await this.roomRepository.findByCode(roomCode);
+      if (!room) return;
+
+      const player = await this.playerRepository.findByRoomIdAndPlayerId(room.id, data.playerId);
+      if (!player?.is_host) {
+        client.emit('error', { message: 'Only the host can change estimation type' });
+        return;
+      }
+
+      if (data.estimationType !== 'fibonacci' && data.estimationType !== 'hours') return;
+
+      await this.roomRepository.updateEstimationType(room.id, data.estimationType);
+      await this.playerRepository.resetVotesByRoomId(room.id);
+      await this.roomRepository.updateIsRevealed(room.id, false);
+
+      const updatedRoom = await this.roomRepository.findById(room.id);
+      if (updatedRoom) {
+        const fullRoom = await this.buildRoomFromDb(updatedRoom);
+        this.server.to(room.code).emit('roomReset');
+        this.server.to(room.code).emit('roomState', { room: fullRoom });
+      }
+    } catch (error) {
+      this.logger.error('Error changing estimation type', error instanceof Error ? error.stack : undefined, {
+        roomCode: data.roomCode,
+        playerId: data.playerId
+      });
+    }
+  }
+
+  @SubscribeMessage('updateProfile')
+  async handleUpdateProfile(client: Socket, data: { roomCode: string; playerId: string; playerName?: string; avatar?: string }) {
+    try {
+      const auth = this.getAuthenticatedPlayer(client);
+      if (!auth || auth.playerId !== data.playerId) {
+        client.emit('error', { message: 'Unauthorized' });
+        return;
+      }
+
+      const roomCode = this.normalizeCode(data.roomCode);
+      const room = await this.roomRepository.findByCode(roomCode);
+      if (!room) return;
+
+      const player = await this.playerRepository.findByRoomIdAndPlayerId(room.id, data.playerId);
+      if (!player) return;
+
+      const newName = data.playerName?.trim().slice(0, 30);
+      const newAvatar = data.avatar?.trim();
+
+      if (newName) {
+        await this.playerRepository.updateName(data.playerId, newName);
+      }
+      if (newAvatar) {
+        await this.playerRepository.updateAvatar(data.playerId, newAvatar);
+      }
+
+      const updatedRoom = await this.roomRepository.findById(room.id);
+      if (updatedRoom) {
+        const fullRoom = await this.buildRoomFromDb(updatedRoom);
+        this.server.to(room.code).emit('roomState', { room: fullRoom });
+      }
+    } catch (error) {
+      this.logger.error('Error updating profile', error instanceof Error ? error.stack : undefined, {
+        roomCode: data.roomCode,
+        playerId: data.playerId
+      });
+    }
+  }
+
   @SubscribeMessage('getSessionStats')
   async handleGetSessionStats(client: Socket, data: { roomCode: string }) {
     try {

@@ -174,4 +174,24 @@ export class PlayerRepository {
       });
     });
   }
+
+  updateName(id: string, name: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const db = this.databaseService.getDatabase();
+      db.run(`UPDATE players SET name = ? WHERE id = ?`, [name, id], (err) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+  }
+
+  updateAvatar(id: string, avatar: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const db = this.databaseService.getDatabase();
+      db.run(`UPDATE players SET avatar = ? WHERE id = ?`, [avatar, id], (err) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+  }
 }
