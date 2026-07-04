@@ -21,13 +21,20 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
   }
 
   onModuleDestroy() {
-    if (this.db) {
-      this.db.close();
-    }
+    return new Promise<void>((resolve) => {
+      if (this.db) {
+        this.db.close(() => resolve());
+      } else {
+        resolve();
+      }
+    });
   }
 
   private initializeTables() {
     this.db.serialize(() => {
+      this.db.run(`PRAGMA foreign_keys = ON`);
+      this.db.run(`PRAGMA journal_mode = WAL`);
+
       this.db.run(`
         CREATE TABLE IF NOT EXISTS rooms (
           id TEXT PRIMARY KEY,
@@ -130,16 +137,28 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  updateRoundDecision(roundId: number, finalDecision: string): Promise<void> {
+  updateRoundDecision(roundId: number, finalDecision: string, roomId?: string): Promise<void> {
     return new Promise((resolve, reject) => {
-      this.db.run(
-        `UPDATE rounds SET final_decision = ? WHERE id = ?`,
-        [finalDecision, roundId],
-        function(err) {
-          if (err) reject(err);
-          else resolve();
-        }
-      );
+      const query = roomId
+        ? `UPDATE rounds SET final_decision = ? WHERE id = ? AND room_id = ?`
+        : `UPDATE rounds SET final_decision = ? WHERE id = ?`;
+      const params = roomId
+        ? [finalDecision, roundId, roomId]
+        : [finalDecision, roundId];
+
+      this.db.run(query, params, function(err) {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+  }
+
+  deleteRoundsByRoomId(roomId: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      this.db.run(`DELETE FROM rounds WHERE room_id = ?`, [roomId], (err) => {
+        if (err) reject(err);
+        else resolve();
+      });
     });
   }
 
@@ -150,17 +169,25 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
         [roomId],
         (err, rows) => {
           if (err) reject(err);
-          else resolve(rows.map((row: any) => ({
-            id: row.id,
-            roundNumber: row.round_number,
-            votes: JSON.parse(row.votes),
-            average: row.average,
-            stdDev: row.std_dev,
-            title: row.title || undefined,
-            link: row.link || undefined,
-            finalDecision: row.final_decision || undefined,
-            createdAt: row.created_at
-          })));
+          else resolve(rows.map((row: any) => {
+            let votes: any[] = [];
+            try {
+              votes = JSON.parse(row.votes);
+            } catch {
+              votes = [];
+            }
+            return {
+              id: row.id,
+              roundNumber: row.round_number,
+              votes,
+              average: row.average,
+              stdDev: row.std_dev,
+              title: row.title || undefined,
+              link: row.link || undefined,
+              finalDecision: row.final_decision || undefined,
+              createdAt: row.created_at
+            };
+          }));
         }
       );
     });
@@ -174,17 +201,25 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
         (err, rows: any[]) => {
           if (err) reject(err);
           else {
-            const rounds = rows.map(row => ({
-              id: row.id,
-              roundNumber: row.round_number,
-              votes: JSON.parse(row.votes),
-              average: row.average,
-              stdDev: row.std_dev,
-              title: row.title || undefined,
-              link: row.link || undefined,
-              finalDecision: row.final_decision || undefined,
-              createdAt: row.created_at
-            }));
+            const rounds = rows.map(row => {
+              let votes: any[] = [];
+              try {
+                votes = JSON.parse(row.votes);
+              } catch {
+                votes = [];
+              }
+              return {
+                id: row.id,
+                roundNumber: row.round_number,
+                votes,
+                average: row.average,
+                stdDev: row.std_dev,
+                title: row.title || undefined,
+                link: row.link || undefined,
+                finalDecision: row.final_decision || undefined,
+                createdAt: row.created_at
+              };
+            });
             
             const playerStats: Record<string, { name: string; votes: string[]; sum: number; count: number }> = {};
             
@@ -193,7 +228,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
                 if (!playerStats[v.playerId]) {
                   playerStats[v.playerId] = { name: v.playerName, votes: [], sum: 0, count: 0 };
                 }
-                const numVal = v.vote?.endsWith('h') ? parseInt(v.vote.replace('h', '')) : parseInt(v.vote);
+                const numVal = v.vote?.endsWith('h') ? parseFloat(v.vote.replace('h', '')) : parseFloat(v.vote);
                 if (!isNaN(numVal)) {
                   playerStats[v.playerId].sum += numVal;
                   playerStats[v.playerId].count++;
@@ -202,8 +237,11 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
               });
             });
 
-            const overallAvg = rounds.length > 0
-              ? (rounds.reduce((sum, r) => sum + parseFloat(r.average || '0'), 0) / rounds.length).toFixed(1)
+            const numericAverages = rounds
+              .map(r => parseFloat(r.average || '0'))
+              .filter(n => !isNaN(n));
+            const overallAvg = numericAverages.length > 0
+              ? (numericAverages.reduce((sum, n) => sum + n, 0) / numericAverages.length).toFixed(1)
               : '0';
 
             resolve({

@@ -53,13 +53,14 @@ interface ServerToClientEvents {
   playerJoined: (data: { player: Player }) => void;
   playerLeft: (data: { playerId: string }) => void;
   playerKicked: (data: { playerId: string; reason: string }) => void;
-  voteUpdated: (data: { playerId: string; vote: string }) => void;
+  voteUpdated: (data: { playerId: string; hasVoted: boolean }) => void;
   votesRevealed: (data: { room: Room }) => void;
   roomReset: () => void;
   gameStarted: () => void;
   error: (data: { message: string }) => void;
   roomState: (data: { room: Room }) => void;
   roundHistory: (data: { history: RoundHistory[] }) => void;
+  lastSavedRoundId: (data: { roundId: number }) => void;
   sessionStats: (data: { stats: any; roomCode: string }) => void;
 }
 
@@ -71,13 +72,16 @@ interface ClientToServerEvents {
   kickPlayer: (data: { roomCode: string; playerId: string; targetPlayerId: string }) => void;
   startGame: (data: { roomCode: string; playerId: string }) => void;
   submitVote: (data: { roomCode: string; playerId: string; vote: string }) => void;
-  revealVotes: (data: { roomCode: string; playerId: string }) => void;
+  revealVotes: (data: { roomCode: string; playerId: string; title?: string; link?: string }) => void;
+  updateRoundDecision: (data: { roomCode: string; playerId: string; roundId: number; finalDecision: string }) => void;
   resetRound: (data: { roomCode: string; playerId: string }) => void;
+  getRoundHistory: (data: { roomCode: string }) => void;
+  getSessionStats: (data: { roomCode: string }) => void;
 }
 
 @WebSocketGateway({
   cors: {
-    origin: process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175', 'http://localhost:5176', 'http://localhost:5177'],
+    origin: process.env.ALLOWED_ORIGINS?.split(',').map(s => s.trim()).filter(Boolean) || ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175', 'http://localhost:5176', 'http://localhost:5177'],
     credentials: true,
   },
 })
@@ -86,6 +90,7 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
   server: Server;
 
   private socketToPlayer: Map<string, { roomId: string; playerId: string }> = new Map();
+  private disconnectTimers: Map<string, NodeJS.Timeout> = new Map();
 
   private readonly logger = new StructuredLogger();
   private readonly voteRateLimiter: VoteRateLimiter;
@@ -107,18 +112,32 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.logger.log('Client disconnected', { socketId: client.id });
     const playerInfo = this.socketToPlayer.get(client.id);
     if (playerInfo) {
-      this.handlePlayerDisconnect(playerInfo.roomId, playerInfo.playerId);
       this.socketToPlayer.delete(client.id);
+      const timer = setTimeout(() => {
+        this.handlePlayerDisconnect(playerInfo.roomId, playerInfo.playerId);
+        this.disconnectTimers.delete(playerInfo.playerId);
+      }, 30000);
+      this.disconnectTimers.set(playerInfo.playerId, timer);
     }
   }
 
   private async handlePlayerDisconnect(roomId: string, playerId: string) {
     try {
+      const player = await this.playerRepository.findById(playerId);
+      if (!player || player.socket_id) return;
       await this.playerRepository.clearSocketId(playerId);
       this.server.to(roomId).emit('playerLeft', { playerId });
     } catch (error) {
-      console.error('Error handling player disconnect:', error);
+      this.logger.error('Error handling player disconnect', error instanceof Error ? error.stack : undefined);
     }
+  }
+
+  private normalizeCode(code: string): string {
+    return (code || '').toUpperCase().trim();
+  }
+
+  private getAuthenticatedPlayer(client: Socket): { roomId: string; playerId: string } | null {
+    return this.socketToPlayer.get(client.id) || null;
   }
 
   private generateRoomCode(): string {
@@ -130,7 +149,7 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
     return Math.random().toString(36).substring(2, 11);
   }
 
-  private async buildRoomFromDb(roomRow: any): Promise<Room> {
+  private async buildRoomFromDb(roomRow: any, includeVotes = false): Promise<Room> {
     const players = await this.playerRepository.findByRoomId(roomRow.id);
     return {
       code: roomRow.code,
@@ -142,7 +161,7 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
         avatar: p.avatar || 'vincent',
         isHost: !!p.is_host,
         hasVoted: !!p.has_voted,
-        vote: p.vote || undefined,
+        vote: includeVotes ? (p.vote || undefined) : undefined,
       })),
       isRevealed: !!roomRow.is_revealed,
       isStarted: !!roomRow.is_started,
@@ -154,35 +173,53 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @SubscribeMessage('createRoom')
   async handleCreateRoom(client: Socket, data: { playerName: string; estimationType: 'fibonacci' | 'hours'; avatar: string }) {
     try {
-      const roomCode = this.generateRoomCode();
-      const playerId = this.generatePlayerId();
-      const roomId = this.generatePlayerId();
+      const playerName = (data.playerName || '').trim().slice(0, 30);
+      if (!playerName) return { success: false, error: 'Name is required' };
 
-      await this.roomRepository.create(roomId, roomCode, data.estimationType, playerId);
-      await this.playerRepository.create(playerId, roomId, data.playerName, data.avatar, true, client.id);
+      let roomCode: string;
+      let roomId: string;
+      let attempts = 0;
+      while (attempts < 3) {
+        roomCode = this.generateRoomCode();
+        roomId = this.generatePlayerId();
+        try {
+          await this.roomRepository.create(roomId, roomCode, data.estimationType, '');
+          break;
+        } catch (e: any) {
+          if (e?.message?.includes('UNIQUE') && attempts < 2) {
+            attempts++;
+            continue;
+          }
+          throw e;
+        }
+      }
+
+      const playerId = this.generatePlayerId();
+      await this.playerRepository.create(playerId, roomId!, playerName, data.avatar, true, client.id);
+      await this.roomRepository.updateHostId(roomId!, playerId);
 
       const player: Player = {
         id: playerId,
         socketId: client.id,
-        name: data.playerName,
+        name: playerName,
         avatar: data.avatar,
         isHost: true,
         hasVoted: false,
       };
 
-      const room = await this.roomRepository.findById(roomId);
+      const room = await this.roomRepository.findById(roomId!);
       if (room) {
         const fullRoom = await this.buildRoomFromDb(room);
-        client.join(roomCode);
-        this.socketToPlayer.set(client.id, { roomId, playerId });
-        client.emit('roomCreated', { roomCode, player });
+        client.join(roomCode!);
+        this.socketToPlayer.set(client.id, { roomId: roomId!, playerId });
+        client.emit('roomCreated', { roomCode: roomCode!, player });
         client.emit('roomState', { room: fullRoom });
         return { success: true, room: fullRoom, player };
       }
 
       return { success: false, error: 'Failed to create room' };
     } catch (error) {
-      console.error('Error creating room:', error);
+      this.logger.error('Error creating room', error instanceof Error ? error.stack : undefined);
       return { success: false, error: 'Failed to create room' };
     }
   }
@@ -190,19 +227,23 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @SubscribeMessage('joinRoom')
   async handleJoinRoom(client: Socket, data: { roomCode: string; playerName: string; avatar: string }) {
     try {
-      const room = await this.roomRepository.findByCode(data.roomCode.toUpperCase());
+      const playerName = (data.playerName || '').trim().slice(0, 30);
+      if (!playerName) return { success: false, error: 'Name is required' };
+
+      const roomCode = this.normalizeCode(data.roomCode);
+      const room = await this.roomRepository.findByCode(roomCode);
 
       if (!room) {
         return { success: false, error: 'Room not found' };
       }
 
       const playerId = this.generatePlayerId();
-      await this.playerRepository.create(playerId, room.id, data.playerName, data.avatar, false, client.id);
+      await this.playerRepository.create(playerId, room.id, playerName, data.avatar, false, client.id);
 
       const player: Player = {
         id: playerId,
         socketId: client.id,
-        name: data.playerName,
+        name: playerName,
         avatar: data.avatar,
         isHost: false,
         hasVoted: false,
@@ -217,7 +258,7 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
       return { success: true, room: fullRoom, player };
     } catch (error) {
-      console.error('Error joining room:', error);
+      this.logger.error('Error joining room', error instanceof Error ? error.stack : undefined);
       return { success: false, error: 'Failed to join room' };
     }
   }
@@ -225,7 +266,8 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @SubscribeMessage('rejoinRoom')
   async handleRejoinRoom(client: Socket, data: { roomCode: string; playerId: string; playerName: string }) {
     try {
-      const room = await this.roomRepository.findByCode(data.roomCode.toUpperCase());
+      const roomCode = this.normalizeCode(data.roomCode);
+      const room = await this.roomRepository.findByCode(roomCode);
 
       if (!room) {
         return { success: false, error: 'Room not found' };
@@ -234,6 +276,19 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
       const existingPlayer = await this.playerRepository.findByRoomIdAndPlayerId(room.id, data.playerId);
 
       if (existingPlayer) {
+        if (existingPlayer.socket_id) {
+          const existingSocket = this.server.sockets.sockets.get(existingPlayer.socket_id);
+          if (existingSocket && existingSocket.connected) {
+            return { success: false, error: 'Player session already active' };
+          }
+        }
+
+        const disconnectTimer = this.disconnectTimers.get(data.playerId);
+        if (disconnectTimer) {
+          clearTimeout(disconnectTimer);
+          this.disconnectTimers.delete(data.playerId);
+        }
+
         await this.playerRepository.updateSocketId(data.playerId, client.id);
         
         const player: Player = {
@@ -246,23 +301,26 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
           vote: existingPlayer.vote || undefined,
         };
 
-        const fullRoom = await this.buildRoomFromDb(room);
+        const isRevealed = !!room.is_revealed;
+        const fullRoom = await this.buildRoomFromDb(room, isRevealed);
         client.join(room.code);
         this.socketToPlayer.set(client.id, { roomId: room.id, playerId: data.playerId });
         client.emit('roomJoined', { room: fullRoom, player });
-        client.to(room.code).emit('playerJoined', { player });
-        client.to(room.code).emit('roomState', { room: fullRoom });
+        client.to(room.code).emit('roomState', { room: await this.buildRoomFromDb(room) });
 
         return { success: true, room: fullRoom, player };
       }
 
+      const playerName = (data.playerName || '').trim().slice(0, 30);
+      if (!playerName) return { success: false, error: 'Name is required' };
+
       const newPlayerId = this.generatePlayerId();
-      await this.playerRepository.create(newPlayerId, room.id, data.playerName, 'vincent', false, client.id);
+      await this.playerRepository.create(newPlayerId, room.id, playerName, 'vincent', false, client.id);
 
       const player: Player = {
         id: newPlayerId,
         socketId: client.id,
-        name: data.playerName,
+        name: playerName,
         avatar: 'vincent',
         isHost: false,
         hasVoted: false,
@@ -277,7 +335,7 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
       return { success: true, room: fullRoom, player };
     } catch (error) {
-      console.error('Error rejoining room:', error);
+      this.logger.error('Error rejoining room', error instanceof Error ? error.stack : undefined);
       return { success: false, error: 'Failed to rejoin room' };
     }
   }
@@ -285,7 +343,14 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @SubscribeMessage('leaveRoom')
   async handleLeaveRoom(client: Socket, data: { roomCode: string; playerId: string }) {
     try {
-      const room = await this.roomRepository.findByCode(data.roomCode);
+      const auth = this.getAuthenticatedPlayer(client);
+      if (!auth || auth.playerId !== data.playerId) {
+        client.emit('error', { message: 'Unauthorized' });
+        return;
+      }
+
+      const roomCode = this.normalizeCode(data.roomCode);
+      const room = await this.roomRepository.findByCode(roomCode);
       if (!room) return;
 
       const player = await this.playerRepository.findByRoomIdAndPlayerId(room.id, data.playerId);
@@ -298,10 +363,12 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
       const remainingPlayers = await this.playerRepository.findByRoomId(room.id);
       
       if (remainingPlayers.length === 0) {
+        await this.databaseService.deleteRoundsByRoomId(room.id);
         await this.roomRepository.delete(room.id);
       } else if (player.is_host) {
         const newHost = remainingPlayers[0];
         await this.playerRepository.updateHostByRoomId(room.id, newHost.id);
+        await this.roomRepository.updateHostId(room.id, newHost.id);
         const updatedRoom = await this.roomRepository.findById(room.id);
         if (updatedRoom) {
           const fullRoom = await this.buildRoomFromDb(updatedRoom);
@@ -310,42 +377,33 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
       }
 
       this.server.to(room.code).emit('playerLeft', { playerId: data.playerId });
-      
-      const updatedRoom = await this.roomRepository.findById(room.id);
-      if (updatedRoom) {
-        const fullRoom = await this.buildRoomFromDb(updatedRoom);
-        client.emit('roomState', { room: { ...fullRoom, players: [] } });
-        this.server.to(room.code).emit('roomState', { room: fullRoom });
-      }
     } catch (error) {
-      console.error('Error leaving room:', error);
+      this.logger.error('Error leaving room', error instanceof Error ? error.stack : undefined);
     }
   }
 
   @SubscribeMessage('kickPlayer')
   async handleKickPlayer(client: Socket, data: { roomCode: string; playerId: string; targetPlayerId: string }) {
     try {
-      // Rate limiting check
+      const auth = this.getAuthenticatedPlayer(client);
+      if (!auth || auth.playerId !== data.playerId) {
+        client.emit('error', { message: 'Unauthorized' });
+        return;
+      }
+
       const rateLimit = this.voteRateLimiter.checkLimit(data.playerId, 'kick');
       if (!rateLimit.allowed) {
-        this.logger.warn('Kick rate limit exceeded', { 
-          playerId: data.playerId, 
-          roomCode: data.roomCode,
-          retryAfter: rateLimit.retryAfter 
-        });
         client.emit('error', { message: `Too many kick attempts. Try again in ${rateLimit.retryAfter}s` });
         return;
       }
 
-      const room = await this.roomRepository.findByCode(data.roomCode);
+      const roomCode = this.normalizeCode(data.roomCode);
+      const room = await this.roomRepository.findByCode(roomCode);
       if (!room) return;
 
       const requester = await this.playerRepository.findByRoomIdAndPlayerId(room.id, data.playerId);
       if (!requester?.is_host) {
-        this.logger.warn('Non-host attempted to kick player', { 
-          playerId: data.playerId, 
-          roomCode: data.roomCode 
-        });
+        client.emit('error', { message: 'Only the host can kick players' });
         return;
       }
 
@@ -376,14 +434,6 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
         }
       }
 
-      const remainingPlayers = await this.playerRepository.findByRoomId(room.id);
-      if (remainingPlayers.length === 0) {
-        await this.roomRepository.delete(room.id);
-      } else if (targetPlayer.is_host) {
-        const newHost = remainingPlayers[0];
-        await this.playerRepository.updateHostByRoomId(room.id, newHost.id);
-      }
-
       this.server.to(room.code).emit('playerLeft', { playerId: data.targetPlayerId });
       
       const updatedRoom = await this.roomRepository.findById(room.id);
@@ -403,55 +453,69 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @SubscribeMessage('startGame')
   async handleStartGame(client: Socket, data: { roomCode: string; playerId: string }) {
     try {
-      const room = await this.roomRepository.findByCode(data.roomCode);
+      const auth = this.getAuthenticatedPlayer(client);
+      if (!auth || auth.playerId !== data.playerId) {
+        client.emit('error', { message: 'Unauthorized' });
+        return;
+      }
+
+      const roomCode = this.normalizeCode(data.roomCode);
+      const room = await this.roomRepository.findByCode(roomCode);
       if (!room) return;
 
       const player = await this.playerRepository.findByRoomIdAndPlayerId(room.id, data.playerId);
       if (!player?.is_host) return;
 
+      if (room.is_started) return;
+
       await this.roomRepository.updateIsStarted(room.id, true);
-      const updatedRoom = await this.roomRepository.findById(room.id);
-      
-      if (updatedRoom) {
-        const fullRoom = await this.buildRoomFromDb(updatedRoom);
-        this.server.to(room.code).emit('gameStarted');
-      }
+      this.server.to(room.code).emit('gameStarted');
     } catch (error) {
-      console.error('Error starting game:', error);
+      this.logger.error('Error starting game', error instanceof Error ? error.stack : undefined);
     }
   }
 
   @SubscribeMessage('submitVote')
   async handleSubmitVote(client: Socket, data: { roomCode: string; playerId: string; vote: string }) {
     try {
-      // Rate limiting check
+      const auth = this.getAuthenticatedPlayer(client);
+      if (!auth || auth.playerId !== data.playerId) {
+        client.emit('error', { message: 'Unauthorized' });
+        return;
+      }
+
       const rateLimit = this.voteRateLimiter.checkLimit(data.playerId, 'vote');
       if (!rateLimit.allowed) {
-        this.logger.warn('Vote rate limit exceeded', { 
-          playerId: data.playerId, 
-          roomCode: data.roomCode,
-          retryAfter: rateLimit.retryAfter 
-        });
         client.emit('error', { message: `Too many votes. Try again in ${rateLimit.retryAfter}s` });
         return;
       }
 
-      const room = await this.roomRepository.findByCode(data.roomCode);
+      const roomCode = this.normalizeCode(data.roomCode);
+      const room = await this.roomRepository.findByCode(roomCode);
       if (!room) return;
 
-      await this.playerRepository.updateVote(data.playerId, data.vote);
-      
-      this.logger.log('Vote submitted', { 
-        playerId: data.playerId, 
-        roomCode: data.roomCode,
-        vote: data.vote 
-      });
+      if (!room.is_started) {
+        client.emit('error', { message: 'Game has not started yet' });
+        return;
+      }
+      if (room.is_revealed) {
+        client.emit('error', { message: 'Votes already revealed' });
+        return;
+      }
+
+      const player = await this.playerRepository.findByRoomIdAndPlayerId(room.id, data.playerId);
+      if (!player) return;
+
+      const vote = (data.vote || '').trim().slice(0, 10);
+      if (!vote) return;
+
+      await this.playerRepository.updateVote(data.playerId, vote);
       
       const updatedRoom = await this.roomRepository.findById(room.id);
       if (updatedRoom) {
         const fullRoom = await this.buildRoomFromDb(updatedRoom);
         this.server.to(room.code).emit('roomState', { room: fullRoom });
-        this.server.to(room.code).emit('voteUpdated', { playerId: data.playerId, vote: data.vote });
+        this.server.to(room.code).emit('voteUpdated', { playerId: data.playerId, hasVoted: true });
       }
     } catch (error) {
       this.logger.error('Error submitting vote', error instanceof Error ? error.stack : undefined, {
@@ -464,8 +528,23 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @SubscribeMessage('revealVotes')
   async handleRevealVotes(client: Socket, data: { roomCode: string; playerId: string; title?: string; link?: string }) {
     try {
-      const room = await this.roomRepository.findByCode(data.roomCode);
+      const auth = this.getAuthenticatedPlayer(client);
+      if (!auth || auth.playerId !== data.playerId) {
+        client.emit('error', { message: 'Unauthorized' });
+        return;
+      }
+
+      const rateLimit = this.voteRateLimiter.checkLimit(data.playerId, 'reveal');
+      if (!rateLimit.allowed) {
+        client.emit('error', { message: `Too many reveal attempts. Try again in ${rateLimit.retryAfter}s` });
+        return;
+      }
+
+      const roomCode = this.normalizeCode(data.roomCode);
+      const room = await this.roomRepository.findByCode(roomCode);
       if (!room) return;
+
+      if (room.is_revealed) return;
 
       const player = await this.playerRepository.findByRoomIdAndPlayerId(room.id, data.playerId);
       if (!player?.is_host) return;
@@ -483,13 +562,12 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
       
       const validVotes = votes.map(v => v.vote).filter(v => v && v !== '?' && v !== '☕');
       const numericVotes = validVotes
-        .map(v => v?.endsWith('h') ? parseInt(v.replace('h', '')) : parseInt(v || '0'))
+        .map(v => v?.endsWith('h') ? parseFloat(v.replace('h', '')) : parseFloat(v || '0'))
         .filter(n => !isNaN(n));
       const average = numericVotes.length > 0 
         ? (numericVotes.reduce((a, b) => a + b, 0) / numericVotes.length).toFixed(1)
         : '-';
 
-      // Calculate standard deviation
       let stdDev = '-';
       if (numericVotes.length > 1) {
         const avg = parseFloat(average);
@@ -498,28 +576,24 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
       }
 
       await this.roomRepository.incrementRoundCount(room.id);
+
+      const title = (data.title || '').trim().slice(0, 500) || undefined;
+      const link = (data.link || '').trim().slice(0, 500) || undefined;
+
       await this.databaseService.saveRound(
         room.id,
         (room.round_count || 0) + 1,
         votes,
         average,
         stdDev,
-        data.title,
-        data.link
+        title,
+        link
       );
-
-      this.logger.log('Votes revealed', { 
-        roomCode: data.roomCode,
-        hostId: data.playerId,
-        voteCount: votes.length,
-        average,
-        stdDev 
-      });
 
       const updatedRoom = await this.roomRepository.findById(room.id);
       
       if (updatedRoom) {
-        const fullRoom = await this.buildRoomFromDb(updatedRoom);
+        const fullRoom = await this.buildRoomFromDb(updatedRoom, true);
         const history = await this.databaseService.getRoundHistory(room.id);
         this.server.to(room.code).emit('votesRevealed', { room: fullRoom });
         this.server.to(room.code).emit('roundHistory', { history });
@@ -536,19 +610,23 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @SubscribeMessage('updateRoundDecision')
   async handleUpdateRoundDecision(client: Socket, data: { roomCode: string; playerId: string; roundId: number; finalDecision: string }) {
     try {
-      const room = await this.roomRepository.findByCode(data.roomCode);
+      const auth = this.getAuthenticatedPlayer(client);
+      if (!auth || auth.playerId !== data.playerId) {
+        client.emit('error', { message: 'Unauthorized' });
+        return;
+      }
+
+      const roomCode = this.normalizeCode(data.roomCode);
+      const room = await this.roomRepository.findByCode(roomCode);
       if (!room) return;
 
       const player = await this.playerRepository.findByRoomIdAndPlayerId(room.id, data.playerId);
       if (!player?.is_host) return;
 
-      await this.databaseService.updateRoundDecision(data.roundId, data.finalDecision);
+      const finalDecision = (data.finalDecision || '').trim().slice(0, 500);
+      if (!finalDecision) return;
 
-      this.logger.log('Round decision updated', {
-        roundId: data.roundId,
-        finalDecision: data.finalDecision,
-        roomCode: data.roomCode,
-      });
+      await this.databaseService.updateRoundDecision(data.roundId, finalDecision, room.id);
 
       const updatedRoom = await this.roomRepository.findById(room.id);
       if (updatedRoom) {
@@ -566,8 +644,21 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @SubscribeMessage('resetRound')
   async handleResetRound(client: Socket, data: { roomCode: string; playerId: string }) {
     try {
-      const room = await this.roomRepository.findByCode(data.roomCode);
+      const auth = this.getAuthenticatedPlayer(client);
+      if (!auth || auth.playerId !== data.playerId) {
+        client.emit('error', { message: 'Unauthorized' });
+        return;
+      }
+
+      const roomCode = this.normalizeCode(data.roomCode);
+      const room = await this.roomRepository.findByCode(roomCode);
       if (!room) return;
+
+      const player = await this.playerRepository.findByRoomIdAndPlayerId(room.id, data.playerId);
+      if (!player?.is_host) {
+        client.emit('error', { message: 'Only the host can reset the round' });
+        return;
+      }
 
       await this.roomRepository.updateIsRevealed(room.id, false);
       await this.playerRepository.resetVotesByRoomId(room.id);
@@ -589,7 +680,8 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @SubscribeMessage('getRoundHistory')
   async handleGetRoundHistory(client: Socket, data: { roomCode: string }) {
     try {
-      const room = await this.roomRepository.findByCode(data.roomCode);
+      const roomCode = this.normalizeCode(data.roomCode);
+      const room = await this.roomRepository.findByCode(roomCode);
       if (!room) return;
 
       const history = await this.databaseService.getRoundHistory(room.id);
@@ -603,20 +695,13 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   @SubscribeMessage('getSessionStats')
   async handleGetSessionStats(client: Socket, data: { roomCode: string }) {
-    this.logger.log('getSessionStats received', { roomCode: data.roomCode });
     try {
-      const room = await this.roomRepository.findByCode(data.roomCode);
-      if (!room) {
-        this.logger.warn('Room not found for stats', { roomCode: data.roomCode });
-        return;
-      }
+      const roomCode = this.normalizeCode(data.roomCode);
+      const room = await this.roomRepository.findByCode(roomCode);
+      if (!room) return;
 
       const stats = await this.databaseService.getSessionStats(room.id);
-      this.logger.log('Session stats computed', { 
-        roomCode: data.roomCode,
-        totalRounds: stats.totalRounds 
-      });
-      client.emit('sessionStats', { stats, roomCode: data.roomCode });
+      client.emit('sessionStats', { stats, roomCode: room.code });
     } catch (error) {
       this.logger.error('Error getting session stats', error instanceof Error ? error.stack : undefined, {
         roomCode: data.roomCode 

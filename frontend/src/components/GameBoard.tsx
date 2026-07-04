@@ -126,6 +126,9 @@ export function GameBoard({ room, player, onLeaveGame, onSubmitVote, onReveal, o
   useEffect(() => {
     if (clearLocalVote) {
       setLocalSelectedVote(undefined)
+      setRoundTitle('')
+      setRoundLink('')
+      setFinalDecision('')
       resetClearLocalVote()
       soundManager.playReset()
     }
@@ -160,9 +163,7 @@ export function GameBoard({ room, player, onLeaveGame, onSubmitVote, onReveal, o
       // Space to reveal (host only, when at least 2 votes)
       if (e.code === 'Space' && player.isHost && !room.isRevealed && room.players.filter(p => p.hasVoted).length >= 2) {
         e.preventDefault()
-        onReveal()
-        soundManager.enable()
-        soundManager.playReveal()
+        handleRevealWithMetadata()
       }
 
       // Number keys to vote
@@ -395,12 +396,12 @@ export function GameBoard({ room, player, onLeaveGame, onSubmitVote, onReveal, o
                           handleCustomHourSubmit()
                         }
                       }}
-                      disabled={!!selectedVote}
+                      disabled={false}
                     />
                     <motion.button
                       className="btn btn-small hours-submit"
                       onClick={handleCustomHourSubmit}
-                      disabled={!!selectedVote || !customHourInput.trim()}
+                      disabled={!customHourInput.trim()}
                       whileHover={{ scale: 1.05 }}
                       whileTap={{ scale: 0.95 }}
                     >
