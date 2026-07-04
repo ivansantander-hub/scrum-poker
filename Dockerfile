@@ -34,7 +34,7 @@ COPY --from=builder /app/backend/dist ./backend/dist
 COPY --from=builder /app/backend/package.json ./backend/package.json
 COPY --from=builder /app/package.json ./package.json
 
-RUN mkdir -p /app/backend/data
+RUN mkdir -p /app/backend/data && chown -R node:node /app/backend/data
 
 ENV NODE_ENV=production
 ENV PORT=3000
