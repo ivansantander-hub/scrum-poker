@@ -139,7 +139,7 @@ function AppContent() {
   }
 
   const handleLeaveGame = () => {
-    // Returns to lobby view (room.isStarted stays true on server)
+    leaveRoom()
   }
 
   const handleSubmitVote = (vote: string) => {

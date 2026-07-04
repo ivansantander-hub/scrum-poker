@@ -99,7 +99,7 @@ function PlayerAvatar({ name, avatar, hasVoted, onDoubleClick }: { name: string;
 
 export function GameBoard({ room, player, onLeaveGame, onSubmitVote, onReveal, onReset }: GameBoardProps) {
   const { language, toggleLanguage, clearLocalVote, resetClearLocalVote } = useGameStore()
-  const { getRoundHistory, getSessionStats, showSessionReport, closeSessionReport, kickPlayer, revealVotes, updateRoundDecision, currentRoundId } = useSocket()
+  const { getRoundHistory, getSessionStats, showSessionReport, closeSessionReport, kickPlayer, revealVotes, updateRoundDecision, currentRoundId, changeEstimationType, updateProfile } = useSocket()
   const [showConfirm, setShowConfirm] = useState(false)
   const [showKickConfirm, setShowKickConfirm] = useState<{ show: boolean; playerId: string; playerName: string } | null>(null)
   const [customHourInput, setCustomHourInput] = useState('')
@@ -110,6 +110,7 @@ export function GameBoard({ room, player, onLeaveGame, onSubmitVote, onReveal, o
   const [previewAvatar, setPreviewAvatar] = useState<string | null>(null)
   const [showHistory, setShowHistory] = useState(false)
   const [soundEnabled, setSoundEnabled] = useState(soundManager.isEnabled())
+  const [copyFeedback, setCopyFeedback] = useState<string | null>(null)
   const selectedVote = localSelectedVote || player.vote
   const cards = room.estimationType === 'fibonacci' ? FIBONACCI_CARDS : HOURS_CARDS
   const average = calculateAverage(room.players.map(p => p.vote))
@@ -117,6 +118,19 @@ export function GameBoard({ room, player, onLeaveGame, onSubmitVote, onReveal, o
   const handleShowReport = () => {
     console.log('Show report clicked, requesting session stats...')
     getSessionStats(room.code)
+  }
+
+  const copyRoomCode = () => {
+    navigator.clipboard.writeText(room.code)
+      .then(() => { setCopyFeedback(language === 'en' ? 'Code copied!' : 'Codigo copiado!'); setTimeout(() => setCopyFeedback(null), 2000) })
+      .catch(() => { setCopyFeedback(language === 'en' ? 'Failed to copy' : 'Error al copiar'); setTimeout(() => setCopyFeedback(null), 2000) })
+  }
+
+  const copyInviteLink = () => {
+    const url = `${window.location.origin}?room=${room.code}`
+    navigator.clipboard.writeText(url)
+      .then(() => { setCopyFeedback(language === 'en' ? 'Link copied!' : 'Enlace copiado!'); setTimeout(() => setCopyFeedback(null), 2000) })
+      .catch(() => { setCopyFeedback(language === 'en' ? 'Failed to copy' : 'Error al copiar'); setTimeout(() => setCopyFeedback(null), 2000) })
   }
 
   useEffect(() => {
@@ -160,8 +174,8 @@ export function GameBoard({ room, player, onLeaveGame, onSubmitVote, onReveal, o
       // Skip shortcuts when custom input is focused
       if (document.activeElement?.tagName === 'INPUT') return
 
-      // Space to reveal (host only, when at least 2 votes)
-      if (e.code === 'Space' && player.isHost && !room.isRevealed && room.players.filter(p => p.hasVoted).length >= 2) {
+      // Space to reveal (host only, when at least 1 vote)
+      if (e.code === 'Space' && player.isHost && !room.isRevealed && room.players.filter(p => p.hasVoted).length >= 1) {
         e.preventDefault()
         handleRevealWithMetadata()
       }
@@ -211,9 +225,10 @@ export function GameBoard({ room, player, onLeaveGame, onSubmitVote, onReveal, o
   }
 
   const handleSaveDecision = () => {
-    const decision = finalDecision.trim()
-    if (!decision || !currentRoundId) return
+    const decision = finalDecision.trim() || average
+    if (!decision || decision === '-' || !currentRoundId) return
     updateRoundDecision(currentRoundId, decision)
+    setTimeout(() => onReset(), 300)
   }
 
   const handleKickClick = (targetPlayer: Player) => {
@@ -256,11 +271,39 @@ export function GameBoard({ room, player, onLeaveGame, onSubmitVote, onReveal, o
         </motion.button>
         <div className="room-info">
           <span className="room-label">{t('room', language)}</span>
-          <span className="room-code">{room.code}</span>
+          <span className="room-code" onClick={copyRoomCode} style={{ cursor: 'pointer' }} title={language === 'en' ? 'Click to copy' : 'Clic para copiar'}>{room.code}</span>
+          <motion.button
+            className="btn-icon"
+            onClick={copyInviteLink}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            title={language === 'en' ? 'Copy invite link' : 'Copiar enlace'}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+              <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+            </svg>
+          </motion.button>
         </div>
-        <div className="mode-badge">
-          {room.estimationType === 'fibonacci' ? `🌰 ${t('fibonacci', language)}` : `⏱ ${t('hours', language)}`}
-        </div>
+        {player.isHost ? (
+          <motion.button
+            className="mode-badge"
+            onClick={() => changeEstimationType(room.estimationType === 'fibonacci' ? 'hours' : 'fibonacci')}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            title={language === 'en' ? 'Click to switch mode' : 'Clic para cambiar modo'}
+            style={{ cursor: 'pointer' }}
+          >
+            {room.estimationType === 'fibonacci' ? `🌰 ${t('fibonacci', language)}` : `⏱ ${t('hours', language)}`}
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginLeft: '4px' }}>
+              <polyline points="6 9 12 15 18 9"/>
+            </svg>
+          </motion.button>
+        ) : (
+          <div className="mode-badge">
+            {room.estimationType === 'fibonacci' ? `🌰 ${t('fibonacci', language)}` : `⏱ ${t('hours', language)}`}
+          </div>
+        )}
         {room.isRevealed && (
           <motion.button 
             className="btn btn-small" 
@@ -330,13 +373,13 @@ export function GameBoard({ room, player, onLeaveGame, onSubmitVote, onReveal, o
                 <motion.button
                   className="kick-btn"
                   onClick={() => handleKickClick(p)}
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.9 }}
                   title={t('kickPlayer', language)}
                 >
                   <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M1 4l5 5-5 5"/>
-                    <line x1="11" y1="9" x2="23" y2="9"/>
+                    <line x1="18" y1="6" x2="6" y2="18"/>
+                    <line x1="6" y1="6" x2="18" y2="18"/>
                   </svg>
                 </motion.button>
               )}
@@ -435,7 +478,7 @@ export function GameBoard({ room, player, onLeaveGame, onSubmitVote, onReveal, o
                   <span>{t('voteSubmitted', language)}</span>
                 </motion.div>
               )}
-              {player.isHost && room.players.filter(p => p.hasVoted).length >= 2 && (
+              {player.isHost && !room.isRevealed && (
                 <motion.div
                   className="round-metadata"
                   initial={{ opacity: 0, y: 10 }}
@@ -456,15 +499,27 @@ export function GameBoard({ room, player, onLeaveGame, onSubmitVote, onReveal, o
                     value={roundLink}
                     onChange={(e) => setRoundLink(e.target.value)}
                   />
-                  <motion.button 
-                    className="btn btn-primary btn-large" 
-                    onClick={handleRevealWithMetadata}
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                  >
-                    {t('revealAll', language)} ({room.players.filter(p => p.hasVoted).length}/{room.players.length})
-                  </motion.button>
+                  {room.players.filter(p => p.hasVoted).length >= 1 && (
+                    <motion.button 
+                      className="btn btn-primary btn-large" 
+                      onClick={handleRevealWithMetadata}
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                    >
+                      {t('revealAll', language)} ({room.players.filter(p => p.hasVoted).length}/{room.players.length})
+                    </motion.button>
+                  )}
                 </motion.div>
+              )}
+              {!player.isHost && roundTitle && (
+                <div className="round-metadata">
+                  <p className="round-meta-title">{roundTitle}</p>
+                  {roundLink && (
+                    <a href={roundLink} target="_blank" rel="noopener noreferrer" className="round-meta-link">
+                      {roundLink}
+                    </a>
+                  )}
+                </div>
               )}
               <p className="shortcuts-hint">{t('shortcutsHint', language)}</p>
             </motion.div>
@@ -512,9 +567,9 @@ export function GameBoard({ room, player, onLeaveGame, onSubmitVote, onReveal, o
                       onChange={(e) => setFinalDecision(e.target.value)}
                     />
                     <motion.button
-                      className="btn btn-small"
+                      className="btn btn-primary"
                       onClick={handleSaveDecision}
-                      disabled={!finalDecision.trim() || !currentRoundId}
+                      disabled={!currentRoundId}
                       whileHover={{ scale: 1.05 }}
                       whileTap={{ scale: 0.95 }}
                     >
@@ -589,6 +644,18 @@ export function GameBoard({ room, player, onLeaveGame, onSubmitVote, onReveal, o
     <AnimatePresence>
       {showSessionReport && (
         <SessionReport showSessionReport={showSessionReport} onClose={closeSessionReport} />
+      )}
+    </AnimatePresence>
+    <AnimatePresence>
+      {copyFeedback && (
+        <motion.div
+          className="copy-toast"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: 20 }}
+        >
+          {copyFeedback}
+        </motion.div>
       )}
     </AnimatePresence>
     </>

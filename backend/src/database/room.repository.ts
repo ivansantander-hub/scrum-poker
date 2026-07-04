@@ -123,4 +123,18 @@ export class RoomRepository {
       );
     });
   }
+
+  updateEstimationType(id: string, estimationType: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const db = this.databaseService.getDatabase();
+      db.run(
+        `UPDATE rooms SET estimation_type = ? WHERE id = ?`,
+        [estimationType, id],
+        (err) => {
+          if (err) reject(err);
+          else resolve();
+        }
+      );
+    });
+  }
 }

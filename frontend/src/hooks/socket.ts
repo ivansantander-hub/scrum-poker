@@ -39,6 +39,8 @@ interface ClientToServerEvents {
   resetRound: (data: { roomCode: string; playerId: string }) => void
   getRoundHistory: (data: { roomCode: string }) => void
   getSessionStats: (data: { roomCode: string }) => void
+  changeEstimationType: (data: { roomCode: string; playerId: string; estimationType: 'fibonacci' | 'hours' }) => void
+  updateProfile: (data: { roomCode: string; playerId: string; playerName?: string; avatar?: string }) => void
 }
 
 let socket: Socket<ServerToClientEvents, ClientToServerEvents> | null = null
