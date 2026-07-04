@@ -463,7 +463,7 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   @SubscribeMessage('revealVotes')
-  async handleRevealVotes(client: Socket, data: { roomCode: string; playerId: string }) {
+  async handleRevealVotes(client: Socket, data: { roomCode: string; playerId: string; title?: string; link?: string }) {
     try {
       const room = await this.roomRepository.findByCode(data.roomCode);
       if (!room) return;
@@ -504,7 +504,9 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
         (room.round_count || 0) + 1,
         votes,
         average,
-        stdDev
+        stdDev,
+        data.title,
+        data.link
       );
 
       this.logger.log('Votes revealed', { 
@@ -522,9 +524,40 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
         const history = await this.databaseService.getRoundHistory(room.id);
         this.server.to(room.code).emit('votesRevealed', { room: fullRoom });
         this.server.to(room.code).emit('roundHistory', { history });
+        client.emit('lastSavedRoundId', { roundId: history[0]?.id });
       }
     } catch (error) {
       this.logger.error('Error revealing votes', error instanceof Error ? error.stack : undefined, {
+        roomCode: data.roomCode,
+        playerId: data.playerId
+      });
+    }
+  }
+
+  @SubscribeMessage('updateRoundDecision')
+  async handleUpdateRoundDecision(client: Socket, data: { roomCode: string; playerId: string; roundId: number; finalDecision: string }) {
+    try {
+      const room = await this.roomRepository.findByCode(data.roomCode);
+      if (!room) return;
+
+      const player = await this.playerRepository.findByRoomIdAndPlayerId(room.id, data.playerId);
+      if (!player?.is_host) return;
+
+      await this.databaseService.updateRoundDecision(data.roundId, data.finalDecision);
+
+      this.logger.log('Round decision updated', {
+        roundId: data.roundId,
+        finalDecision: data.finalDecision,
+        roomCode: data.roomCode,
+      });
+
+      const updatedRoom = await this.roomRepository.findById(room.id);
+      if (updatedRoom) {
+        const history = await this.databaseService.getRoundHistory(room.id);
+        this.server.to(room.code).emit('roundHistory', { history });
+      }
+    } catch (error) {
+      this.logger.error('Error updating round decision', error instanceof Error ? error.stack : undefined, {
         roomCode: data.roomCode,
         playerId: data.playerId
       });

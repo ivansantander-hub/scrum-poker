@@ -58,6 +58,10 @@ export const translations = {
     or: 'or',
     customHoursPlaceholder: 'Custom hours (e.g. 6h)',
     customHoursSubmit: 'SET',
+    roundTitlePlaceholder: 'Round title (e.g. SP-123)',
+    roundLinkPlaceholder: 'Link to Jira / Notion (optional)',
+    finalDecisionPlaceholder: 'Final decision (if different from avg)',
+    saveDecision: 'Save',
   },
   es: {
     online: 'En línea',
@@ -116,6 +120,10 @@ export const translations = {
     or: 'o',
     customHoursPlaceholder: 'Horas personalizadas (ej. 6h)',
     customHoursSubmit: 'PONER',
+    roundTitlePlaceholder: 'Título de ronda (ej. SP-123)',
+    roundLinkPlaceholder: 'Link a Jira / Notion (opcional)',
+    finalDecisionPlaceholder: 'Decisión final (si difiere del prom)',
+    saveDecision: 'Guardar',
   },
 } as const
 

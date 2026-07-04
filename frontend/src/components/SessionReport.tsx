@@ -82,14 +82,29 @@ export function SessionReport({ showSessionReport, onClose }: SessionReportProps
             <div className="report-rounds">
               {sessionStats.rounds.map((round: any) => (
                 <div key={round.id} className="report-round-row">
-                  <span className="report-round-num">#{round.roundNumber}</span>
-                  <span className="report-round-avg">
-                    {round.average}
-                    {round.stdDev && round.stdDev !== '-' && (
-                      <span className="round-stddev"> ±{round.stdDev}</span>
+                  <div className="report-round-info">
+                    <span className="report-round-num">#{round.roundNumber}</span>
+                    {round.title && <span className="report-round-title">{round.title}</span>}
+                    {round.link && (
+                      <a href={round.link} target="_blank" rel="noopener noreferrer" className="report-round-link">
+                        🔗
+                      </a>
                     )}
-                  </span>
-                  <span className="report-round-votes">{round.votes.length} {language === 'en' ? 'votes' : 'votos'}</span>
+                  </div>
+                  <div className="report-round-stats">
+                    <span className="report-round-avg">
+                      {round.average}
+                      {round.stdDev && round.stdDev !== '-' && (
+                        <span className="round-stddev"> ±{round.stdDev}</span>
+                      )}
+                    </span>
+                    {round.finalDecision && (
+                      <span className="report-round-decision">
+                        {language === 'en' ? '→' : '→'} {round.finalDecision}
+                      </span>
+                    )}
+                    <span className="report-round-votes">{round.votes.length} {language === 'en' ? 'votes' : 'votos'}</span>
+                  </div>
                 </div>
               ))}
             </div>
