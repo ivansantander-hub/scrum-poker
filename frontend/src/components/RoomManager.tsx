@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useGameStore } from '../hooks/useGameStore'
+import { useAuthStore } from '../hooks/useAuthStore'
 import { t } from '../i18n'
 import { AvatarSelector } from './AvatarSelector'
 
@@ -12,6 +13,7 @@ interface RoomManagerProps {
   error: string | null
   onClearError: () => void
   prefilledRoomCode?: string | null
+  onBack?: () => void
 }
 
 const panelVariants = {
@@ -33,19 +35,20 @@ const buttonVariants = {
   })
 }
 
-export function RoomManager({ onCreateRoom, onJoinRoom, error, onClearError, prefilledRoomCode }: RoomManagerProps) {
+export function RoomManager({ onCreateRoom, onJoinRoom, error, onClearError, prefilledRoomCode, onBack }: RoomManagerProps) {
+  const authUser = useAuthStore((s) => s.user)
   const [mode, setMode] = useState<'choice' | 'create' | 'join'>(() => prefilledRoomCode ? 'join' : 'choice')
   const [roomCode, setRoomCode] = useState(prefilledRoomCode || '')
-  const [playerName, setPlayerName] = useState('')
+  const [playerName, setPlayerName] = useState(authUser?.name ?? '')
   const [selectedAvatar, setSelectedAvatar] = useState('vincent')
   const [estimationType, setEstimationType] = useState<EstimationType>('fibonacci')
   const [localError, setLocalError] = useState('')
-  const { language, toggleLanguage, savedName, savedAvatar, saveUserPreferences } = useGameStore()
+  const { language, toggleLanguage, savedAvatar, saveUserPreferences } = useGameStore()
 
   useEffect(() => {
-    if (savedName) setPlayerName(savedName)
+    if (authUser?.name) setPlayerName(authUser.name)
     if (savedAvatar) setSelectedAvatar(savedAvatar)
-  }, [])
+  }, [authUser?.name, savedAvatar])
 
   useEffect(() => {
     if (prefilledRoomCode) {
@@ -78,9 +81,13 @@ export function RoomManager({ onCreateRoom, onJoinRoom, error, onClearError, pre
   }
 
   const resetForm = () => {
+    if (onBack && mode === 'choice') {
+      onBack()
+      return
+    }
     setMode('choice')
     setLocalError('')
-    setPlayerName('')
+    setPlayerName(authUser?.name ?? '')
     setRoomCode('')
     setEstimationType('fibonacci')
     onClearError()
@@ -133,6 +140,17 @@ export function RoomManager({ onCreateRoom, onJoinRoom, error, onClearError, pre
               animate="visible"
               exit="exit"
             >
+              {onBack && (
+                <motion.button
+                  className="back-btn"
+                  onClick={onBack}
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  whileHover={{ x: -4 }}
+                >
+                  {t('back', language)}
+                </motion.button>
+              )}
               <motion.h2
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}

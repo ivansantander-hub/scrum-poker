@@ -8,6 +8,7 @@ export interface RoomRow {
   is_revealed: number;
   is_started: number;
   host_id: string;
+  owner_id: string | null;
   round_count: number;
   created_at: string;
 }
@@ -134,6 +135,44 @@ export class RoomRepository {
           if (err) reject(err);
           else resolve();
         }
+      );
+    });
+  }
+
+  findByOwnerId(ownerId: string): Promise<RoomRow[]> {
+    return new Promise((resolve, reject) => {
+      const db = this.databaseService.getDatabase();
+      db.all(
+        `SELECT * FROM rooms WHERE owner_id = ? ORDER BY created_at DESC`,
+        [ownerId],
+        (err, rows) => {
+          if (err) reject(err);
+          else resolve(rows as RoomRow[]);
+        },
+      );
+    });
+  }
+
+  findAllRooms(): Promise<RoomRow[]> {
+    return new Promise((resolve, reject) => {
+      const db = this.databaseService.getDatabase();
+      db.all(`SELECT * FROM rooms ORDER BY created_at DESC`, [], (err, rows) => {
+        if (err) reject(err);
+        else resolve(rows as RoomRow[]);
+      });
+    });
+  }
+
+  updateOwnerId(id: string, ownerId: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const db = this.databaseService.getDatabase();
+      db.run(
+        `UPDATE rooms SET owner_id = ? WHERE id = ?`,
+        [ownerId, id],
+        (err) => {
+          if (err) reject(err);
+          else resolve();
+        },
       );
     });
   }

@@ -7,25 +7,31 @@ import * as fs from 'fs';
 export class DatabaseService implements OnModuleInit, OnModuleDestroy {
   private db!: sqlite3.Database;
 
-  onModuleInit() {
+  async onModuleInit() {
     const dataDir = path.join(process.cwd(), 'data');
     if (!fs.existsSync(dataDir)) {
       fs.mkdirSync(dataDir, { recursive: true });
     }
 
     const dbPath = path.join(dataDir, 'scrum-poker.db');
-    this.db = new sqlite3.Database(dbPath, (err) => {
-      if (err) {
-        console.error('Failed to open database:', err);
-        return;
-      }
-      console.log('Database connected:', dbPath);
-      this.initializeTables();
+
+    await new Promise<void>((resolve, reject) => {
+      this.db = new sqlite3.Database(dbPath, (err) => {
+        if (err) {
+          console.error('Failed to open database:', err);
+          reject(err);
+          return;
+        }
+        console.log('Database connected:', dbPath);
+        resolve();
+      });
     });
 
     this.db.on('error', (err) => {
       console.error('Database error:', err);
     });
+
+    await this.initializeTables();
   }
 
   onModuleDestroy() {
@@ -38,10 +44,11 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  private initializeTables() {
-    this.db.serialize(() => {
-      this.db.run(`PRAGMA foreign_keys = ON`);
-      this.db.run(`PRAGMA journal_mode = WAL`);
+  private initializeTables(): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      this.db.serialize(() => {
+        this.db.run(`PRAGMA foreign_keys = ON`);
+        this.db.run(`PRAGMA journal_mode = WAL`);
 
       this.db.run(`
         CREATE TABLE IF NOT EXISTS rooms (
@@ -124,7 +131,54 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
 
       this.db.run(`CREATE INDEX IF NOT EXISTS idx_rounds_room ON rounds(room_id)`);
 
-      console.log('Database tables initialized');
+      this.db.run(`
+        CREATE TABLE IF NOT EXISTS users (
+          id TEXT PRIMARY KEY,
+          email TEXT UNIQUE NOT NULL,
+          password_hash TEXT NOT NULL,
+          name TEXT NOT NULL,
+          role TEXT NOT NULL DEFAULT 'user',
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+
+      this.db.run(`CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)`);
+
+      this.db.run(`
+        CREATE TABLE IF NOT EXISTS room_members (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          room_id TEXT NOT NULL,
+          user_id TEXT NOT NULL,
+          joined_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (room_id) REFERENCES rooms(id),
+          FOREIGN KEY (user_id) REFERENCES users(id),
+          UNIQUE(room_id, user_id)
+        )
+      `);
+
+      this.db.run(`CREATE INDEX IF NOT EXISTS idx_room_members_room ON room_members(room_id)`);
+      this.db.run(`CREATE INDEX IF NOT EXISTS idx_room_members_user ON room_members(user_id)`);
+
+      this.db.run(`ALTER TABLE rooms ADD COLUMN owner_id TEXT`, (err: any) => {
+        if (err && !err.message?.includes('duplicate column')) {
+          console.log('Owner id column check:', err.message);
+        }
+      });
+
+      this.db.run(`ALTER TABLE players ADD COLUMN user_id TEXT`, (err: any) => {
+        if (err && !err.message?.includes('duplicate column')) {
+          console.log('User id column check:', err.message);
+        }
+      });
+
+      this.db.run(`SELECT 1`, (err) => {
+          if (err) reject(err);
+          else {
+            console.log('Database tables initialized');
+            resolve();
+          }
+        });
+      });
     });
   }
 

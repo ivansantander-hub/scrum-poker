@@ -8,7 +8,9 @@ import {
 import { Server, Socket } from 'socket.io';
 import { RoomRepository } from '../database/room.repository';
 import { PlayerRepository } from '../database/player.repository';
+import { RoomMemberRepository } from '../database/room-member.repository';
 import { DatabaseService } from '../database/database.service';
+import { AuthService } from '../auth/auth.service';
 import { StructuredLogger } from '../common/structured-logger.service';
 import { VoteRateLimiter } from '../common/vote-rate-limiter.service';
 
@@ -98,14 +100,35 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
   constructor(
     private roomRepository: RoomRepository,
     private playerRepository: PlayerRepository,
+    private roomMemberRepository: RoomMemberRepository,
     private databaseService: DatabaseService,
+    private authService: AuthService,
   ) {
     this.logger.setContext('AppGateway');
     this.voteRateLimiter = new VoteRateLimiter();
   }
 
-  handleConnection(client: Socket) {
+  async handleConnection(client: Socket) {
+    const token = client.handshake.auth?.token as string | undefined;
+    if (!token) {
+      client.disconnect();
+      return;
+    }
+
+    try {
+      const payload = this.authService.verifyAccessToken(token);
+      client.data.userId = payload.sub;
+      client.data.role = payload.role;
+    } catch {
+      client.disconnect();
+      return;
+    }
+
     this.logger.log('Client connected', { socketId: client.id, ip: client.handshake.address });
+  }
+
+  private getSocketUserId(client: Socket): string | null {
+    return (client.data.userId as string) || null;
   }
 
   handleDisconnect(client: Socket) {
@@ -182,6 +205,9 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @SubscribeMessage('createRoom')
   async handleCreateRoom(client: Socket, data: { playerName: string; estimationType: 'fibonacci' | 'hours'; avatar: string }) {
     try {
+      const userId = this.getSocketUserId(client);
+      if (!userId) return { success: false, error: 'Unauthorized' };
+
       const playerName = (data.playerName || '').trim().slice(0, 30);
       if (!playerName) return { success: false, error: 'Name is required' };
 
@@ -203,9 +229,12 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
         }
       }
 
+      await this.roomRepository.updateOwnerId(roomId!, userId);
+
       const playerId = this.generatePlayerId();
-      await this.playerRepository.create(playerId, roomId!, playerName, data.avatar, true, client.id);
+      await this.playerRepository.create(playerId, roomId!, playerName, data.avatar, true, client.id, userId);
       await this.roomRepository.updateHostId(roomId!, playerId);
+      await this.roomMemberRepository.addMember(roomId!, userId);
 
       const player: Player = {
         id: playerId,
@@ -236,6 +265,9 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @SubscribeMessage('joinRoom')
   async handleJoinRoom(client: Socket, data: { roomCode: string; playerName: string; avatar: string }) {
     try {
+      const userId = this.getSocketUserId(client);
+      if (!userId) return { success: false, error: 'Unauthorized' };
+
       const playerName = (data.playerName || '').trim().slice(0, 30);
       if (!playerName) return { success: false, error: 'Name is required' };
 
@@ -247,7 +279,8 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
       }
 
       const playerId = this.generatePlayerId();
-      await this.playerRepository.create(playerId, room.id, playerName, data.avatar, false, client.id);
+      await this.playerRepository.create(playerId, room.id, playerName, data.avatar, false, client.id, userId);
+      await this.roomMemberRepository.addMember(room.id, userId);
 
       const player: Player = {
         id: playerId,
@@ -275,6 +308,9 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @SubscribeMessage('rejoinRoom')
   async handleRejoinRoom(client: Socket, data: { roomCode: string; playerId: string; playerName: string }) {
     try {
+      const userId = this.getSocketUserId(client);
+      if (!userId) return { success: false, error: 'Unauthorized' };
+
       const roomCode = this.normalizeCode(data.roomCode);
       const room = await this.roomRepository.findByCode(roomCode);
 
@@ -282,65 +318,43 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
         return { success: false, error: 'Room not found' };
       }
 
-      const existingPlayer = await this.playerRepository.findByRoomIdAndPlayerId(room.id, data.playerId);
+      const existingPlayer = await this.playerRepository.findByRoomIdAndUserId(room.id, userId);
 
-      if (existingPlayer) {
-        if (existingPlayer.socket_id) {
-          const existingSocket = this.server.sockets.sockets.get(existingPlayer.socket_id);
-          if (existingSocket && existingSocket.connected) {
-            return { success: false, error: 'Player session already active' };
-          }
-        }
-
-        const disconnectTimer = this.disconnectTimers.get(data.playerId);
-        if (disconnectTimer) {
-          clearTimeout(disconnectTimer);
-          this.disconnectTimers.delete(data.playerId);
-        }
-
-        await this.playerRepository.updateSocketId(data.playerId, client.id);
-        
-        const player: Player = {
-          id: existingPlayer.id,
-          socketId: client.id,
-          name: existingPlayer.name,
-          avatar: existingPlayer.avatar || 'vincent',
-          isHost: !!existingPlayer.is_host,
-          hasVoted: !!existingPlayer.has_voted,
-          vote: existingPlayer.vote || undefined,
-        };
-
-        const isRevealed = !!room.is_revealed;
-        const fullRoom = await this.buildRoomFromDb(room, isRevealed);
-        client.join(room.code);
-        this.socketToPlayer.set(client.id, { roomId: room.id, playerId: data.playerId });
-        client.emit('roomJoined', { room: fullRoom, player });
-        client.to(room.code).emit('roomState', { room: await this.buildRoomFromDb(room) });
-
-        return { success: true, room: fullRoom, player };
+      if (!existingPlayer) {
+        return { success: false, error: 'Player not found in room' };
       }
 
-      const playerName = (data.playerName || '').trim().slice(0, 30);
-      if (!playerName) return { success: false, error: 'Name is required' };
+      if (existingPlayer.socket_id) {
+        const existingSocket = this.server.sockets.sockets.get(existingPlayer.socket_id);
+        if (existingSocket && existingSocket.connected) {
+          return { success: false, error: 'Player session already active' };
+        }
+      }
 
-      const newPlayerId = this.generatePlayerId();
-      await this.playerRepository.create(newPlayerId, room.id, playerName, 'vincent', false, client.id);
+      const disconnectTimer = this.disconnectTimers.get(existingPlayer.id);
+      if (disconnectTimer) {
+        clearTimeout(disconnectTimer);
+        this.disconnectTimers.delete(existingPlayer.id);
+      }
+
+      await this.playerRepository.updateSocketId(existingPlayer.id, client.id);
 
       const player: Player = {
-        id: newPlayerId,
+        id: existingPlayer.id,
         socketId: client.id,
-        name: playerName,
-        avatar: 'vincent',
-        isHost: false,
-        hasVoted: false,
+        name: existingPlayer.name,
+        avatar: existingPlayer.avatar || 'vincent',
+        isHost: !!existingPlayer.is_host,
+        hasVoted: !!existingPlayer.has_voted,
+        vote: existingPlayer.vote || undefined,
       };
 
-      const fullRoom = await this.buildRoomFromDb(room);
+      const isRevealed = !!room.is_revealed;
+      const fullRoom = await this.buildRoomFromDb(room, isRevealed);
       client.join(room.code);
-      this.socketToPlayer.set(client.id, { roomId: room.id, playerId: newPlayerId });
+      this.socketToPlayer.set(client.id, { roomId: room.id, playerId: existingPlayer.id });
       client.emit('roomJoined', { room: fullRoom, player });
-      client.to(room.code).emit('playerJoined', { player });
-      client.to(room.code).emit('roomState', { room: fullRoom });
+      client.to(room.code).emit('roomState', { room: await this.buildRoomFromDb(room) });
 
       return { success: true, room: fullRoom, player };
     } catch (error) {

@@ -1,5 +1,7 @@
 import { io, Socket } from 'socket.io-client'
 import { useGameStore } from './useGameStore'
+import { useAuthStore } from './useAuthStore'
+import { authApi } from '../lib/api'
 import { soundManager } from '../utils/sound'
 
 const SOCKET_URL = import.meta.env.VITE_API_URL || (
@@ -45,16 +47,23 @@ interface ClientToServerEvents {
 
 let socket: Socket<ServerToClientEvents, ClientToServerEvents> | null = null
 let listenersInitialized = false
+let isRefreshingForSocket = false
+
+function createSocketConnection(): Socket<ServerToClientEvents, ClientToServerEvents> {
+  const token = useAuthStore.getState().accessToken
+  return io(SOCKET_URL, {
+    reconnection: true,
+    reconnectionAttempts: Infinity,
+    reconnectionDelay: 1000,
+    reconnectionDelayMax: 10000,
+    timeout: 10000,
+    auth: { token },
+  })
+}
 
 export function getSocket(): Socket<ServerToClientEvents, ClientToServerEvents> {
   if (!socket) {
-    socket = io(SOCKET_URL, {
-      reconnection: true,
-      reconnectionAttempts: Infinity,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 10000,
-      timeout: 10000,
-    })
+    socket = createSocketConnection()
     if (!listenersInitialized) {
       initSocketListeners(socket)
       listenersInitialized = true
@@ -65,6 +74,7 @@ export function getSocket(): Socket<ServerToClientEvents, ClientToServerEvents> 
 
 export function disconnectSocket() {
   if (socket) {
+    socket.removeAllListeners()
     socket.disconnect()
     socket = null
     listenersInitialized = false
@@ -100,8 +110,29 @@ function initSocketListeners(socket: Socket<ServerToClientEvents, ClientToServer
     store.getState().setConnected(false)
   })
 
-  socket.on('connect_error', () => {
+  socket.on('connect_error', async (err) => {
     store.getState().setConnected(false)
+
+    const message = err.message ?? ''
+    const isAuthError =
+      message.includes('Authentication') ||
+      message.toLowerCase().includes('jwt')
+
+    if (!isAuthError || isRefreshingForSocket) return
+
+    isRefreshingForSocket = true
+    try {
+      const refreshResult = (await authApi.refresh()) as { accessToken?: string } | null
+      if (refreshResult?.accessToken) {
+        useAuthStore.getState().setToken(refreshResult.accessToken)
+        socket.auth = { token: refreshResult.accessToken }
+        socket.connect()
+      }
+    } catch {
+      // refresh failed — socket will keep retrying
+    } finally {
+      isRefreshingForSocket = false
+    }
   })
 
   socket.on('roomCreated', (data) => {

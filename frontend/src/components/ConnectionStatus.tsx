@@ -1,11 +1,13 @@
 import { useGameStore } from '../hooks/useGameStore'
+import { useAuthStore } from '../hooks/useAuthStore'
 import { t } from '../i18n'
 import { motion } from 'framer-motion'
 
 export function ConnectionStatus() {
   const { isConnected, language } = useGameStore()
+  const user = useAuthStore((s) => s.user)
 
-  if (isConnected) return null
+  if (isConnected || !user) return null
 
   return (
     <motion.div 

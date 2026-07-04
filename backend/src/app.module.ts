@@ -5,13 +5,20 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AppGateway } from './websockets/app.gateway';
 import { DatabaseModule } from './database/database.module';
+import { AuthModule } from './auth/auth.module';
+import { UsersModule } from './users/users.module';
+import { RoomsModule } from './rooms/rooms.module';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { StructuredLogger } from './common/structured-logger.service';
+import { SeedService } from './database/seed.service';
 import { join } from 'path';
 
 @Module({
   imports: [
     DatabaseModule,
+    AuthModule,
+    UsersModule,
+    RoomsModule,
     ThrottlerModule.forRoot({
       throttlers: [
         {
@@ -28,7 +35,14 @@ import { join } from 'path';
     }),
     ServeStaticModule.forRoot({
       rootPath: join(__dirname, 'public'),
-      exclude: ['/health', '/avatars', '/socket.io/{*path}'],
+      exclude: [
+        '/health',
+        '/avatars',
+        '/socket.io/{*path}',
+        '/auth/{*path}',
+        '/users/{*path}',
+        '/rooms/{*path}',
+      ],
     }),
   ],
   controllers: [AppController],
@@ -36,6 +50,7 @@ import { join } from 'path';
     AppService, 
     AppGateway,
     StructuredLogger,
+    SeedService,
     {
       provide: APP_GUARD,
       useClass: ThrottlerGuard,
