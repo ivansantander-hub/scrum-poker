@@ -215,6 +215,7 @@ export function useSocket() {
       socket.off('roomReset')
       socket.off('gameStarted')
       socket.off('roundHistory')
+      socket.off('lastSavedRoundId')
       socket.off('error')
     }
   }, [setConnected, setSocketId, setPlayer, setRoom, addPlayer, removePlayer])
@@ -321,20 +322,28 @@ export function useSocket() {
     const history = state.roundHistory
     if (!history.length || !currentRoom) return
 
+    const escapeCSV = (val: string | number) => {
+      const str = String(val)
+      if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+        return `"${str.replace(/"/g, '""')}"`
+      }
+      return str
+    }
+
     const headers = ['Round', 'Date', 'Title', 'Link', 'Player', 'Vote', 'Average', 'Final Decision']
     const rows: string[] = []
     
     history.forEach((round: RoundHistory) => {
       round.votes.forEach((vote: RoundVote) => {
         rows.push([
-          round.roundNumber,
-          new Date(round.createdAt).toLocaleString(),
-          round.title || '',
-          round.link || '',
-          vote.playerName,
-          vote.vote,
-          round.average,
-          round.finalDecision || ''
+          escapeCSV(round.roundNumber),
+          escapeCSV(new Date(round.createdAt).toLocaleString()),
+          escapeCSV(round.title || ''),
+          escapeCSV(round.link || ''),
+          escapeCSV(vote.playerName),
+          escapeCSV(vote.vote),
+          escapeCSV(round.average),
+          escapeCSV(round.finalDecision || '')
         ].join(','))
       })
     })

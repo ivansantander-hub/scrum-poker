@@ -77,7 +77,7 @@ interface ClientToServerEvents {
 
 @WebSocketGateway({
   cors: {
-    origin: ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175', 'http://localhost:5176', 'http://localhost:5177'],
+    origin: process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175', 'http://localhost:5176', 'http://localhost:5177'],
     credentials: true,
   },
 })
@@ -415,7 +415,6 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
       if (updatedRoom) {
         const fullRoom = await this.buildRoomFromDb(updatedRoom);
         this.server.to(room.code).emit('gameStarted');
-        client.emit('gameStarted');
       }
     } catch (error) {
       console.error('Error starting game:', error);

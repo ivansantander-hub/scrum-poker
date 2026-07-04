@@ -98,7 +98,7 @@ function PlayerAvatar({ name, avatar, hasVoted, onDoubleClick }: { name: string;
 }
 
 export function GameBoard({ room, player, onLeaveGame, onSubmitVote, onReveal, onReset }: GameBoardProps) {
-  const { language, toggleLanguage, clearLocalVote, triggerClearLocalVote } = useGameStore()
+  const { language, toggleLanguage, clearLocalVote, resetClearLocalVote } = useGameStore()
   const { getRoundHistory, getSessionStats, showSessionReport, closeSessionReport, kickPlayer, revealVotes, updateRoundDecision, currentRoundId } = useSocket()
   const [showConfirm, setShowConfirm] = useState(false)
   const [showKickConfirm, setShowKickConfirm] = useState<{ show: boolean; playerId: string; playerName: string } | null>(null)
@@ -126,10 +126,10 @@ export function GameBoard({ room, player, onLeaveGame, onSubmitVote, onReveal, o
   useEffect(() => {
     if (clearLocalVote) {
       setLocalSelectedVote(undefined)
-      triggerClearLocalVote()
+      resetClearLocalVote()
       soundManager.playReset()
     }
-  }, [clearLocalVote])
+  }, [clearLocalVote, resetClearLocalVote])
 
   useEffect(() => {
     setLocalSelectedVote(player.vote)
@@ -170,11 +170,13 @@ export function GameBoard({ room, player, onLeaveGame, onSubmitVote, onReveal, o
         const key = e.key
         const numValue = parseInt(key)
         
-        if (!isNaN(numValue)) {
-          let cardValue: string | null = null
-          
+        let cardValue: string | null = null
+
+        // Special keys for ? and coffee (must be outside numValue check)
+        if (key === 'q' || key === 'Q') cardValue = '?'
+        else if (key === 'c' || key === 'C') cardValue = '☕'
+        else if (!isNaN(numValue)) {
           if (room.estimationType === 'fibonacci') {
-            // Map number keys to Fibonacci values
             const fibMap: Record<number, string> = {
               0: '0', 1: '1', 2: '2', 3: '3', 4: '5', 
               5: '8', 6: '13', 7: '21', 8: '34'
@@ -183,7 +185,6 @@ export function GameBoard({ room, player, onLeaveGame, onSubmitVote, onReveal, o
               cardValue = fibMap[numValue]
             }
           } else {
-            // Map number keys to hours values
             const hourMap: Record<number, string> = {
               1: '1h', 2: '2h', 3: '4h', 4: '8h', 
               5: '12h', 6: '16h', 7: '20h', 8: '24h'
@@ -192,14 +193,10 @@ export function GameBoard({ room, player, onLeaveGame, onSubmitVote, onReveal, o
               cardValue = hourMap[numValue]
             }
           }
-          
-          // Special keys for ? and coffee
-          if (key === 'q' || key === 'Q') cardValue = '?'
-          if (key === 'c' || key === 'C') cardValue = '☕'
-          
-          if (cardValue && cards.includes(cardValue)) {
-            handleVote(cardValue)
-          }
+        }
+        
+        if (cardValue && cards.includes(cardValue)) {
+          handleVote(cardValue)
         }
       }
     }
@@ -210,7 +207,6 @@ export function GameBoard({ room, player, onLeaveGame, onSubmitVote, onReveal, o
 
   const handleRevealWithMetadata = () => {
     revealVotes(roundTitle || undefined, roundLink || undefined)
-    onReveal()
   }
 
   const handleSaveDecision = () => {

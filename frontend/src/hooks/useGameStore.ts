@@ -63,6 +63,7 @@ interface GameState {
   updateRoom: (room: Room) => void
   toggleLanguage: () => void
   triggerClearLocalVote: () => void
+  resetClearLocalVote: () => void
   saveUserPreferences: (name: string, avatar: string) => void
   setSessionStats: (stats: any) => void
   setShowSessionReport: (show: boolean) => void
@@ -140,6 +141,8 @@ export const useGameStore = create<GameState>()(
       })),
       
       triggerClearLocalVote: () => set({ clearLocalVote: true }),
+      
+      resetClearLocalVote: () => set({ clearLocalVote: false }),
       
       saveUserPreferences: (name, avatar) => set({ savedName: name, savedAvatar: avatar }),
       
